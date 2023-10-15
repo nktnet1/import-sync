@@ -1,0 +1,235 @@
+<div align="center">
+
+# [![Import Sync](logo.svg)](https://github.com/nktnet1/import-sync)
+
+[![pipeline](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yml/badge.svg)](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yml)
+&nbsp;
+<!-- [![codecov](https://codecov.io/gh/nktnet1/import-sync/branch/main/graph/badge.svg?token=RAC7SKJTGU)](https://codecov.io/gh/nktnet1/import-sync)
+&nbsp;
+[![Maintainability](https://api.codeclimate.com/v1/badges/2cc2478a1b5a2f293149/maintainability)](https://codeclimate.com/github/nktnet1/import-sync/maintainability)
+&nbsp;
+[![Snyk Security](https://snyk.io/test/github/nktnet1/import-sync/badge.svg)](https://snyk.io/test/github/nktnet1/import-sync)
+&nbsp; -->
+[![GitHub top language](https://img.shields.io/github/languages/top/nktnet1/import-sync)](https://github.com/search?q=repo%3Anktnet1%2Fimport-sync++language%3ATypeScript&type=code)
+
+<!-- [![NPM Version](https://img.shields.io/npm/v/import-sync?logo=npm)](https://www.npmjs.com/package/import-sync?activeTab=versions)
+&nbsp;
+[![install size](https://packagephobia.com/badge?p=import-sync)](https://packagephobia.com/result?p=import-sync)
+&nbsp;
+[![Depfu Dependencies](https://badges.depfu.com/badges/6c4074c4d23ad57ee2bfd9ff90456090/overview.svg)](https://depfu.com/github/nktnet1/import-sync?project_id=39032)
+&nbsp;
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync?ref=badge_shield) -->
+&nbsp;
+[![NPM License](https://img.shields.io/npm/l/import-sync)](https://opensource.org/license/mit/)
+&nbsp;
+[![GitHub issues](https://img.shields.io/github/issues/nktnet1/import-sync.svg?style=social)](https://github.com/nktnet1/import-sync/issues)
+
+<!-- [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=nktnet1_import-sync&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=nktnet1_import-sync)
+&nbsp;
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/65161ae4d1c646ed83c9ef47b0a11473)](https://app.codacy.com/gh/nktnet1/import-sync/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+&nbsp;
+[![DeepSource](https://app.deepsource.com/gh/nktnet1/import-sync.svg/?label=active+issues&show_trend=true&token=OTP6tE2be4X1kvxZRsxRh25e)](https://app.deepsource.com/gh/nktnet1/import-sync/)
+&nbsp;
+[![codebeat badge](https://codebeat.co/badges/8bdb4562-0492-4c1c-8b02-e69c94373d60)](https://codebeat.co/projects/github-com-nktnet1-import-sync-main)
+&nbsp; -->
+[![GitHub stars](https://img.shields.io/github/stars/nktnet1/import-sync.svg?style=social)](https://github.com/nktnet1/import-sync/stargazers)
+
+[![Downloads Total](https://badgen.net/npm/dt/import-sync)](https://moiva.io/?npm=import-sync)
+&nbsp;
+[![Downloads Total](https://badgen.net/npm/dy/import-sync)](https://moiva.io/?npm=import-sync)
+&nbsp;
+[![Downloads Monthly](https://badgen.net/npm/dm/import-sync)](https://moiva.io/?npm=import-sync)
+&nbsp;
+[![Downloads Weekly](https://badgen.net/npm/dw/import-sync)](https://moiva.io/?npm=import-sync)
+&nbsp;
+[![Downloads Daily](https://badgen.net/npm/dd/import-sync)](https://moiva.io/?npm=import-sync)
+
+---
+
+Synchronously import dynamic ES6 modules similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid)
+
+[![Try with Replit](https://replit.com/badge?caption=Try%20with%20Replit)](https://replit.com/@nktnet1/import-sync-example#index.js)
+
+</div>
+
+---
+
+- [1. Installation](#1-installation)
+- [2. Usage](#2-usage)
+    - [2.1. relativePath](#21-relativepath)
+    - [2.2. options](#22-options)
+    - [2.3. return](#23-return)
+- [3. License](#3-license)
+- [4. Limitations](#4-limitations)
+- [5. Caveats](#5-caveats)
+    - [5.1. Idea](#51-idea)
+    - [5.2. Approach](#52-approach)
+
+## 1. Installation
+
+```
+npm install import-sync
+```
+
+## 2. Usage
+
+Try with [Replit](https://replit.com/@nktnet1/import-sync-example#index.js).
+
+```
+importSync(relativePath, options);
+```
+
+<details closed>
+<summary>Examples (click to view)</summary>
+
+<br/>
+
+Importing from the same directory
+
+```javascript
+const { someVariable, someFunction } = importSync('some-module');
+```
+
+Importing `.mjs` file from a different directory
+
+```javascript
+const { someFunction  } = importSync('../src/someModule.mjs');
+```
+
+Using a different basePath
+
+```javascript
+const { someFunction } = importSync(
+  'someModule.mjs',
+  { basePath: process.cwd() }
+);
+```
+
+</details>
+
+<br/>
+
+### 2.1. relativePath
+
+Path to the module relative to the current file, similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid). For example,
+  - `'../animals/cats.js'`
+  - `'./dogs.mjs'`
+  - `'minimal'` 
+    -  import-sync will look for `'./minimal.js'` before `'minimal.mjs'`, then throws an Error if neither files exist.
+
+Note that `option.basePath` can be provided to alter this behaviour.
+
+### 2.2. options
+
+<table>
+  <tr>
+    <th>Option</th>
+    <th>Description</th>
+    <th>Example</th>
+    <th>Default</th>
+  </tr>
+
+  <tr>
+    <td>basePath</td>
+    <td>Absolute path to the module.</td>
+    <td>
+<pre>
+process.cwd()
+</pre>
+    </td>
+    <td><code>__dirname</code></td>
+
+  <tr>
+    <td>esmOptions</td>
+    <td>Options for the esm module as described in esm's <a href="https://github.com/standard-things/esm#options">documentation</a>.</td>
+    <td>
+<pre>
+{
+  cjs: true,
+  mode: 'auto'
+}
+</pre>
+    </td>
+    <td><code>{}</code></td>
+  </tr>
+
+</table>
+
+### 2.3. return
+
+The `importSync` function returns the exported module content similar to NodeJS [require](https://nodejs.org/api/modules.html#requireid).
+
+## 3. License
+
+<details closed>
+<summary>
+  Massachusetts Institute of Technology
+  (<a href="https://opensource.org/license/mit" target="_blank">MIT</a>)
+</summary>
+
+<br/>
+
+```
+Copyright (c) 2023 Khiet Tam Nguyen
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the “Software”),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+</details>
+
+## 4. Limitations
+
+One known non-issue is that in [jest](https://jestjs.io/), calling `importSync` on
+a CommonJS module returns an empty object.
+
+There is currently no plans to fix this issue, as the default NodeJS
+[require](https://nodejs.org/api/modules.html#requireid) should be simply be used
+instead for CommonJS imports.
+
+## 5. Caveats
+
+### 5.1. Idea
+
+**import-sync** was created to enable the implementation of a global dryrun
+script that can be run by students undertaking
+[COMP1531 Software Engineering Fundamentals](https://webcms3.cse.unsw.edu.au/COMP1531/23T2/outline) in their major group project. This requires the ability to import external ES6 modules from any directory or path for use in both CommonJS and ES6 programs.
+
+The dryrun serves as a sanity check before the
+final submission is made, and is located in the centralised [COMP1531 course account](https://taggi.cse.unsw.edu.au/FAQ/Uploading_to_course_accounts/) at the path `~cs1531/bin`. Students who are connected to the CSE lab environment (e.g. via [VLAB](https://taggi.cse.unsw.edu.au/FAQ/VLAB_-_The_technical_details/)) can run the dryrun script from their major project repository, e.g. at the path `~z5313514/comp1531/project-backend`.
+
+### 5.2. Approach
+
+The following methods were attempted, but were unsatisfactory for our purposes:
+
+1. [jewire](https://github.com/nktnet1/jewire)/[rewire](https://github.com/jhnns/rewire)/[require](https://nodejs.org/api/modules.html#requireid)
+    - in iteration 1, the dryrun requires the import of ES6 modules, so [jewire](https://github.com/nktnet1/jewire) (which was used for the dryrun of iteration 0) was no longer satisfying our requirements
+    - the same limitations of being CommonJS exclusive applies to [rewire](https://github.com/jhnns/rewire) and [require](https://nodejs.org/api/modules.html#requireid)
+2. [import()](https://nodejs.org/api/esm.html#import-expressions) - ECMAScript dynamic import
+    - this was the previous attempt at writing the dryrun
+    - However, it relied on asynchronous code. Since COMP1531 is **fully synchronous** (including the use of [sync-request-curl](https://github.com/nktnet1/sync-request-curl) for sending HTTP requests), this became a source of mystery and confusion for students
+    - additionally, students had to append the suffix `.js` to their file imports in the project, solely for the dryrun. This resulted in ambiguous error messages and obscure dryrun requirements unrelated to the project
+3. [require-esm-in-cjs](https://github.com/SamGoody/require-esm-in-cjs)
+    - this library utilises [deasync](https://github.com/abbr/deasync), which when used in NodeJS for Jest tests, could hang indefinitely as seen in Jest's issue [#9729](https://github.com/jestjs/jest/issues/9729)
+    - since COMP1531 uses Jest as the sole testing framework, [deasync](https://github.com/abbr/deasync) could not be used as a dependency
+4. Other async-to-sync conversions for dynamic [import()](https://nodejs.org/api/esm.html#import-expressions)
+    - [synckit](https://github.com/un-ts/synckit): worker_threads, Jest and external imports did not work (unclear reason)
+    - [sync-rpc](https://github.com/ForbesLindesay/sync-rpc): leaves orphan processes when used in Jest as explained in issue [#10](https://github.com/ForbesLindesay/sync-rpc/issues/10)
+    - [fibers](https://github.com/laverdet/node-fibers): obsolete and does not work for node versions later than 16
+    - [synchronize](https://github.com/al6x/synchronize): documentation link gives 404 and has fiber as a dependency
+    - [sync/node-sync](https://github.com/ybogdanov/node-sync): uses fiber (note: "redblaze/node-sync" on github, "sync" on npm)

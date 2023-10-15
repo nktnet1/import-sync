@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "lib": ["es5", "es2015", "esnext", "dom"],
+    "types": ["node", "jest"],
+    "moduleResolution": "node",
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "sourceMap": true,
+    "strict": true,
+    "outDir": "dist/esm",
+    "skipLibCheck": true,
+    "target": "ES6"
+  },
+  "include": [
+    "src/**/*.ts",
+  ]
+}
