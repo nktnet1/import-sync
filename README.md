@@ -46,7 +46,9 @@
 
 ---
 
-Synchronously import dynamic ES6 modules similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid)
+Synchronously import dynamic ECMAScript Modules similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid)
+
+Basic wrapper around [esm](https://github.com/standard-things/esm) for compatibility with both ES6 and CJS projects in NodeJS
 
 [![Try with Replit](https://replit.com/badge?caption=Try%20with%20Replit)](https://replit.com/@nktnet1/import-sync-example#index.js)
 
@@ -63,7 +65,8 @@ Synchronously import dynamic ES6 modules similar to CommonJS [require](https://n
 - [4. Limitations](#4-limitations)
 - [5. Caveats](#5-caveats)
     - [5.1. Idea](#51-idea)
-    - [5.2. Approach](#52-approach)
+    - [5.2. Discovery](#52-approach)
+    - [5.3. Result](#53-result)
 
 ## 1. Installation
 
@@ -97,6 +100,15 @@ const { someFunction  } = importSync('../src/someModule.mjs');
 ```
 
 Using a different basePath
+
+```javascript
+const { someFunction } = importSync(
+  'someModule.mjs',
+  { basePath: process.cwd() }
+);
+```
+
+Using additional esm options as described in esm's [documentation](https://github.com/standard-things/esm#options)
 
 ```javascript
 const { someFunction } = importSync(
@@ -198,9 +210,9 @@ DEALINGS IN THE SOFTWARE.
 One known non-issue is that in [jest](https://jestjs.io/), calling `importSync` on
 a CommonJS module returns an empty object.
 
-There is currently no plans to fix this issue, as the default NodeJS
-[require](https://nodejs.org/api/modules.html#requireid) should be simply be used
-instead for CommonJS imports.
+There are currently no plans to fix this issue, as the built-in NodeJS
+[require](https://nodejs.org/api/modules.html#requireid) function should be used
+instead when importing CommonJS modules.
 
 ## 5. Caveats
 
@@ -213,9 +225,16 @@ script that can be run by students undertaking
 The dryrun serves as a sanity check before the
 final submission is made, and is located in the centralised [COMP1531 course account](https://taggi.cse.unsw.edu.au/FAQ/Uploading_to_course_accounts/) at the path `~cs1531/bin`. Students who are connected to the CSE lab environment (e.g. via [VLAB](https://taggi.cse.unsw.edu.au/FAQ/VLAB_-_The_technical_details/)) can run the dryrun script from their major project repository, e.g. at the path `~z5313514/comp1531/project-backend`.
 
-### 5.2. Approach
+### 5.2. Discovery
 
-The following methods were attempted, but were unsatisfactory for our purposes:
+Initially, the [esm](https://github.com/standard-things/esm) library looked promising. However, when the global dryrun script was executed in a mock student's project directory, the following error occured:
+
+> Error [ERR_REQUIRE_ESM]: require() of ES Module /import/ravel/5/z5313515/project-backend/src/auth.js not supported.<br/>
+Instead change the require of auth.js in null to a dynamic import() which is available in all CommonJS modules
+
+This is due to the `package.json` containing `"type": "module"`, as iteration 1 of the student major project uses ESM for the seamless transition to future iterations.
+
+The following approaches were thus attempted, but were unsatisfactory for our purpose:
 
 1. [jewire](https://github.com/nktnet1/jewire)/[rewire](https://github.com/jhnns/rewire)/[require](https://nodejs.org/api/modules.html#requireid)
     - in iteration 1, the dryrun requires the import of ES6 modules, so [jewire](https://github.com/nktnet1/jewire) (which was used for the dryrun of iteration 0) was no longer satisfying our requirements
@@ -223,7 +242,7 @@ The following methods were attempted, but were unsatisfactory for our purposes:
 2. [import()](https://nodejs.org/api/esm.html#import-expressions) - ECMAScript dynamic import
     - this was the previous attempt at writing the dryrun
     - However, it relied on asynchronous code. Since COMP1531 is **fully synchronous** (including the use of [sync-request-curl](https://github.com/nktnet1/sync-request-curl) for sending HTTP requests), this became a source of mystery and confusion for students
-    - additionally, students had to append the suffix `.js` to their file imports in the project, solely for the dryrun. This resulted in ambiguous error messages and obscure dryrun requirements unrelated to the project
+    - additionally, students had to append the suffix `.js` to all of their file imports in the project solely to use the dryrun. This resulted in ambiguous error messages and obscure dryrun requirements unrelated to the project
 3. [require-esm-in-cjs](https://github.com/SamGoody/require-esm-in-cjs)
     - this library utilises [deasync](https://github.com/abbr/deasync), which when used in NodeJS for Jest tests, could hang indefinitely as seen in Jest's issue [#9729](https://github.com/jestjs/jest/issues/9729)
     - since COMP1531 uses Jest as the sole testing framework, [deasync](https://github.com/abbr/deasync) could not be used as a dependency
@@ -233,3 +252,16 @@ The following methods were attempted, but were unsatisfactory for our purposes:
     - [fibers](https://github.com/laverdet/node-fibers): obsolete and does not work for node versions later than 16
     - [synchronize](https://github.com/al6x/synchronize): documentation link gives 404 and has fiber as a dependency
     - [sync/node-sync](https://github.com/ybogdanov/node-sync): uses fiber (note: "redblaze/node-sync" on github, "sync" on npm)
+
+### 5.3. Result
+
+Upon a more thorough investigation into the initial issue with the
+[esm](https://github.com/standard-things/esm) module, the cause was the
+introduction of the exception starting from NodeJS version 13, as noted in
+[@fregante](https://github.com/fregante)'s comment:
+- https://github.com/standard-things/esm/issues/855#issuecomment-558319872.
+
+Further down the thread was a link to the solution by [@guybedford](https://github.com/guybedford)
+- https://github.com/standard-things/esm/issues/868#issuecomment-594480715
+
+which removes the exception through module extension and serves as a satisfactory workaround.
