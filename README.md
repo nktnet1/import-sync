@@ -12,13 +12,13 @@
 &nbsp; -->
 [![GitHub top language](https://img.shields.io/github/languages/top/nktnet1/import-sync)](https://github.com/search?q=repo%3Anktnet1%2Fimport-sync++language%3ATypeScript&type=code)
 
-<!-- [![NPM Version](https://img.shields.io/npm/v/import-sync?logo=npm)](https://www.npmjs.com/package/import-sync?activeTab=versions)
+[![NPM Version](https://img.shields.io/npm/v/import-sync?logo=npm)](https://www.npmjs.com/package/import-sync?activeTab=versions)
 &nbsp;
 [![install size](https://packagephobia.com/badge?p=import-sync)](https://packagephobia.com/result?p=import-sync)
 &nbsp;
 [![Depfu Dependencies](https://badges.depfu.com/badges/6c4074c4d23ad57ee2bfd9ff90456090/overview.svg)](https://depfu.com/github/nktnet1/import-sync?project_id=39032)
 &nbsp;
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync?ref=badge_shield) -->
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync?ref=badge_shield)
 &nbsp;
 [![NPM License](https://img.shields.io/npm/l/import-sync)](https://opensource.org/license/mit/)
 &nbsp;
@@ -126,7 +126,7 @@ const { someFunction } = importSync(
 Path to the module relative to the current file, similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid). For example,
   - `'../animals/cats.js'`
   - `'./dogs.mjs'`
-  - `'minimal'` 
+  - `'minimal'`
     -  import-sync will look for `'./minimal.js'` before `'minimal.mjs'`, then throws an Error if neither files exist.
 
 Note that `option.basePath` can be provided to alter this behaviour.
@@ -203,6 +203,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync?ref=badge_large)
+
 </details>
 
 ## 4. Limitations
@@ -259,7 +261,7 @@ Upon a more thorough investigation into the initial issue with the
 [esm](https://github.com/standard-things/esm) module, the cause was the
 introduction of the exception starting from NodeJS version 13, as noted in
 [@fregante](https://github.com/fregante)'s comment:
-- https://github.com/standard-things/esm/issues/855#issuecomment-558319872.
+- https://github.com/standard-things/esm/issues/855#issuecomment-558319872
 
 Further down the thread was a link to the solution by [@guybedford](https://github.com/guybedford)
 - https://github.com/standard-things/esm/issues/868#issuecomment-594480715
