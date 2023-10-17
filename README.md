@@ -151,7 +151,7 @@ Note that `option.basePath` can be provided to alter this behaviour.
 
   <tr>
     <td>basePath</td>
-    <td>Absolute path to the module.</td>
+    <td>Absolute path to the module's directory</td>
     <td>
 <pre>
 process.cwd()
