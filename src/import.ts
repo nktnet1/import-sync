@@ -33,7 +33,7 @@ const importSync = (relativePath: string, options: Options = {}) => {
   };
   const opts = { ...defaultOptions, ...options };
   const filePath = path.join(opts.basePath, relativePath);
-  const es6Require = createEs6Require(options.esmOptions);
+  const es6Require = createEs6Require(opts.esmOptions);
   try {
     return es6Require(filePath);
   } catch (error: any) {

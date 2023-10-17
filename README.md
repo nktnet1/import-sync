@@ -213,7 +213,7 @@ One known non-issue is that in [jest](https://jestjs.io/), calling `importSync` 
 a CommonJS module returns an empty object.
 
 There are currently no plans to fix this issue, as the built-in NodeJS
-[require](https://nodejs.org/api/modules.html#requireid) function should be used
+[require](https://nodejs.org/api/modules.html#requireid) function should simply be used
 instead when importing CommonJS modules.
 
 ## 5. Caveats

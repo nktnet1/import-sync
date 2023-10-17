@@ -1,5 +1,5 @@
 import importSync from '../../src';
-const basic = importSync('./basic');
+const basic = importSync('./basic.mjs');
 
 test('ESM import string variable', () => {
   expect(basic.helloString).toStrictEqual('helloworld');
