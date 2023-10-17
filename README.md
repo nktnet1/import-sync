@@ -103,7 +103,7 @@ Using a different basePath
 
 ```javascript
 const { someFunction } = importSync(
-  'someModule.mjs',
+  'someModule',
   { basePath: process.cwd() }
 );
 ```
@@ -112,8 +112,16 @@ Using additional esm options as described in esm's [documentation](https://githu
 
 ```javascript
 const { someFunction } = importSync(
-  'someModule.mjs',
-  { basePath: process.cwd() }
+  'someModule',
+  {
+    esmOptions: {
+      cjs: {
+        cache: true
+      },
+      mode: 'all',
+      force: 'true',
+    }
+  }
 );
 ```
 
@@ -124,10 +132,10 @@ const { someFunction } = importSync(
 ### 2.1. relativePath
 
 Path to the module relative to the current file, similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid). For example,
-  - `'../animals/cats.js'`
-  - `'./dogs.mjs'`
-  - `'minimal'`
-    -  import-sync will look for `'./minimal.js'` before `'minimal.mjs'`, then throws an Error if neither files exist.
+- `'../animals/cats.js'`
+- `'./dogs.mjs'`
+- `'minimal'`
+    -  `importSync` will look for `'./minimal.js'` before `'./minimal.mjs'`
 
 Note that `option.basePath` can be provided to alter this behaviour.
 
@@ -169,7 +177,12 @@ process.cwd()
 
 ### 2.3. return
 
-The `importSync` function returns the exported module content similar to NodeJS [require](https://nodejs.org/api/modules.html#requireid).
+The `importSync` function returns the exported module content similar to NodeJS
+[require](https://nodejs.org/api/modules.html#requireid).
+
+If an unknown file path is provided a default
+[Error](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/Error)
+object is thrown.
 
 ## 3. License
 
@@ -229,7 +242,7 @@ final submission is made, and is located in the centralised [COMP1531 course acc
 
 ### 5.2. Discovery
 
-Initially, the [esm](https://github.com/standard-things/esm) library looked promising. However, when the global dryrun script was executed in a mock student's project directory, the following error occured:
+Initially, the [esm](https://github.com/standard-things/esm) library looked promising. However, when the global dryrun script was executed in a mock student's project directory, the following error occurred:
 
 > Error [ERR_REQUIRE_ESM]: require() of ES Module /import/ravel/5/z5313515/project-backend/src/auth.js not supported.<br/>
 Instead change the require of auth.js in null to a dynamic import() which is available in all CommonJS modules
@@ -247,7 +260,7 @@ The following approaches were thus attempted, but were unsatisfactory for our pu
     - additionally, students had to append the suffix `.js` to all of their file imports in the project solely to use the dryrun. This resulted in ambiguous error messages and obscure dryrun requirements unrelated to the project
 3. [require-esm-in-cjs](https://github.com/SamGoody/require-esm-in-cjs)
     - this library utilises [deasync](https://github.com/abbr/deasync), which when used in NodeJS for Jest tests, could hang indefinitely as seen in Jest's issue [#9729](https://github.com/jestjs/jest/issues/9729)
-    - since COMP1531 uses Jest as the sole testing framework, [deasync](https://github.com/abbr/deasync) could not be used as a dependency
+    - since COMP1531 uses Jest as the sole testing framework, [deasync](https://github.com/abbr/deasync) was ruled out
 4. Other async-to-sync conversions for dynamic [import()](https://nodejs.org/api/esm.html#import-expressions)
     - [synckit](https://github.com/un-ts/synckit): worker_threads, Jest and external imports did not work (unclear reason)
     - [sync-rpc](https://github.com/ForbesLindesay/sync-rpc): leaves orphan processes when used in Jest as explained in issue [#10](https://github.com/ForbesLindesay/sync-rpc/issues/10)
@@ -266,4 +279,4 @@ introduction of the exception starting from NodeJS version 13, as noted in
 Further down the thread was a link to the solution by [@guybedford](https://github.com/guybedford)
 - https://github.com/standard-things/esm/issues/868#issuecomment-594480715
 
-which removes the exception through module extension and serves as a satisfactory workaround.
+which removes the exception through module extension and serves as a satisfactory workaround. This reduced the codebase of **import-sync** to simply a wrapper around [esm](https://www.youtube.com/watch?v=jQS-nEFxJeU).
