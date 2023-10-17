@@ -4,12 +4,12 @@
 
 [![pipeline](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yml/badge.svg)](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yml)
 &nbsp;
-<!-- [![codecov](https://codecov.io/gh/nktnet1/import-sync/branch/main/graph/badge.svg?token=RAC7SKJTGU)](https://codecov.io/gh/nktnet1/import-sync)
+[![codecov](https://codecov.io/gh/nktnet1/import-sync/branch/main/graph/badge.svg?token=RAC7SKJTGU)](https://codecov.io/gh/nktnet1/import-sync)
 &nbsp;
-[![Maintainability](https://api.codeclimate.com/v1/badges/2cc2478a1b5a2f293149/maintainability)](https://codeclimate.com/github/nktnet1/import-sync/maintainability)
+[![Maintainability](https://api.codeclimate.com/v1/badges/aaae5cf33d58299ed722/maintainability)](https://codeclimate.com/github/nktnet1/import-sync/maintainability)
 &nbsp;
 [![Snyk Security](https://snyk.io/test/github/nktnet1/import-sync/badge.svg)](https://snyk.io/test/github/nktnet1/import-sync)
-&nbsp; -->
+&nbsp;
 [![GitHub top language](https://img.shields.io/github/languages/top/nktnet1/import-sync)](https://github.com/search?q=repo%3Anktnet1%2Fimport-sync++language%3ATypeScript&type=code)
 
 [![NPM Version](https://img.shields.io/npm/v/import-sync?logo=npm)](https://www.npmjs.com/package/import-sync?activeTab=versions)
@@ -24,14 +24,14 @@
 &nbsp;
 [![GitHub issues](https://img.shields.io/github/issues/nktnet1/import-sync.svg?style=social)](https://github.com/nktnet1/import-sync/issues)
 
-<!-- [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=nktnet1_import-sync&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=nktnet1_import-sync)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=nktnet1_import-sync&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=nktnet1_import-sync)
 &nbsp;
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/65161ae4d1c646ed83c9ef47b0a11473)](https://app.codacy.com/gh/nktnet1/import-sync/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 &nbsp;
-[![DeepSource](https://app.deepsource.com/gh/nktnet1/import-sync.svg/?label=active+issues&show_trend=true&token=OTP6tE2be4X1kvxZRsxRh25e)](https://app.deepsource.com/gh/nktnet1/import-sync/)
+[![DeepSource](https://app.deepsource.com/gh/nktnet1/import-sync.svg/?label=active+issues&show_trend=true&token=r1frerF1-N2Mhrc7ZXIC1uNa)](https://app.deepsource.com/gh/nktnet1/import-sync/)
 &nbsp;
-[![codebeat badge](https://codebeat.co/badges/8bdb4562-0492-4c1c-8b02-e69c94373d60)](https://codebeat.co/projects/github-com-nktnet1-import-sync-main)
-&nbsp; -->
+[![codebeat badge](https://codebeat.co/badges/acc44573-9938-4a14-bc41-7eb6a58dffbb)](https://codebeat.co/projects/github-com-nktnet1-import-sync-main)
+&nbsp;
 [![GitHub stars](https://img.shields.io/github/stars/nktnet1/import-sync.svg?style=social)](https://github.com/nktnet1/import-sync/stargazers)
 
 [![Downloads Total](https://badgen.net/npm/dt/import-sync)](https://moiva.io/?npm=import-sync)
