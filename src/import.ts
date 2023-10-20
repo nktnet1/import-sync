@@ -11,15 +11,7 @@ import { getCallerFilePath } from './files';
  */
 /* istanbul ignore next */
 const createEs6Require = (esmOptions: ESMOptions) => {
-  /**
-   * Removes the error for "[ERR_REQUIRE_ESM]: require() of ES Module", as per
-   * - https://github.com/standard-things/esm/issues/855#issuecomment-657982788
-   */
-  require('module').Module._extensions['.js'] = (m: any, filename: string) => {
-    m._compile(fs.readFileSync(filename, 'utf-8'), filename);
-  };
   const loader = esm(module, esmOptions);
-
   const newModule = module.constructor.length > 1 ? module.constructor : loader('module');
   const oldResolveFilename = newModule._resolveFilename;
   /**
@@ -31,6 +23,14 @@ const createEs6Require = (esmOptions: ESMOptions) => {
     const newRequest = request.startsWith('node:') ? request.substring(5) : request;
     return oldResolveFilename.call(this, newRequest, parent, isMain);
   };
+  /**
+   * Removes the error for "[ERR_REQUIRE_ESM]: require() of ES Module", as per
+   * - https://github.com/standard-things/esm/issues/855#issuecomment-657982788
+   */
+  newModule._extensions['.js'] = (m: any, filename: string) => {
+    m._compile(fs.readFileSync(filename, 'utf-8'), filename);
+  };
+
   return loader;
 };
 
