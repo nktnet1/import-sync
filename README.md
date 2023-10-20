@@ -131,15 +131,15 @@ const { someFunction } = importSync(
 
 <br/>
 
-### 2.1. relativePath
+### 2.1. id
 
-Path to the module relative to the current file, similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid). For example,
+Module name or relative path similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid). For example,
 - `'../animals/cats.js'`
 - `'./dogs.mjs'`
-- `'minimal'`
+- `'./minimal'`
     -  `importSync` will look for `'./minimal.js'` before `'./minimal.mjs'`
-
-Note that `option.basePath` can be provided to alter this behaviour.
+- `'node-fetch'`
+    - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) in your cjs project
 
 ### 2.2. options
 
@@ -153,7 +153,19 @@ Note that `option.basePath` can be provided to alter this behaviour.
 
   <tr>
     <td>basePath</td>
-    <td>Absolute path to the module's directory</td>
+    <td>
+      Absolute path to the module's directory. The basePath option will only take effect if the given <code>id</code> starts with <code>./</code> or <code>../</code>. For example,
+      <ul>
+        <li>✅ <code>./localModule</code></li>
+        <li>✅ <code>../src/localModule.mjs</code></li>
+      </ul>
+      and not
+      <ul>
+        <li>❌ <code>/home/user/localModule</code></li>
+        <li>❌ <code>localModule</code></li>
+        <li>❌ <code>node-fetch</code></li>
+      </ul>
+    </td>
     <td>
 <pre>
 process.cwd()
