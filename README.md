@@ -48,9 +48,9 @@
 
 Synchronously import dynamic ECMAScript Modules similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid)
 
-Basic wrapper around [esm](https://github.com/standard-things/esm) for compatibility with both ES6 and CJS projects in NodeJS
+Basic wrapper around [esm](https://github.com/standard-things/esm) for compatibility with both ESM and CJS projects in NodeJS
 
-Capable of importing pure-esm libraries such as [node-fetch@3](https://github.com/node-fetch/node-fetch#commonjs) in CJS projects
+Capable of importing ESM-only libraries such as [node-fetch@3](https://github.com/node-fetch/node-fetch#commonjs) in CJS projects
 
 [![Try with Replit](https://replit.com/badge?caption=Try%20with%20Replit)](https://replit.com/@nktnet1/import-sync-example#index.js)
 
@@ -250,9 +250,8 @@ instead when importing CommonJS modules.
 
 ### 5.1. Idea
 
-**import-sync** was created to enable the implementation of a global dryrun
-script that can be run by students undertaking
-[COMP1531 Software Engineering Fundamentals](https://webcms3.cse.unsw.edu.au/COMP1531/23T2/outline) in their major group project. This requires the ability to import external ES6 modules from any directory or path for use in both CommonJS and ES6 programs.
+**import-sync** was created to enable the implementation of a global dryrun script that can be run by students undertaking
+[COMP1531 Software Engineering Fundamentals](https://webcms3.cse.unsw.edu.au/COMP1531/23T2/outline) in their major group project. This requires the ability to import external ES Modules from any directory or path for use in both CommonJS and ESM-based projects.
 
 The dryrun serves as a sanity check before the
 final submission is made, and is located in the centralised [COMP1531 course account](https://taggi.cse.unsw.edu.au/FAQ/Uploading_to_course_accounts/) at the path `~cs1531/bin`. Students who are connected to the CSE lab environment (e.g. via [VLAB](https://taggi.cse.unsw.edu.au/FAQ/VLAB_-_The_technical_details/)) can run the dryrun script from their major project repository, e.g. at the path `~z5313514/comp1531/project-backend`.
@@ -296,4 +295,20 @@ introduction of the exception starting from NodeJS version 13, as noted in
 Further down the thread was a link to the solution by [@guybedford](https://github.com/guybedford)
 - https://github.com/standard-things/esm/issues/868#issuecomment-594480715
 
-which removes the exception through module extension and serves as a satisfactory workaround. This reduced the codebase of **import-sync** to simply a wrapper around [esm](https://www.youtube.com/watch?v=jQS-nEFxJeU).
+which removes the exception through module extension and serves as a satisfactory workaround. This reduced the codebase of **import-sync** to simply a wrapper around [esm](https://github.com/standard-things/esm).
+
+Another issue that **import-sync** (v2) addresses is [esm's open issue #904](https://github.com/standard-things/esm/issues/904), which yields the error message:
+> Error [ERR_INVALID_PROTOCOL]: Protocol 'node:' not supported. Expected 'file:'
+
+when importing ESM-only libraries such as [node-fetch@3](https://github.com/node-fetch/node-fetch/blob/8b3320d2a7c07bce4afc6b2bf6c3bbddda85b01f/README.md#commonjs) in a CommonJS module. This is done by overriding the default `Module._resolveFilename` function to remove the `node:` prefix, effectively changing any imports of the form (for example):
+```javascript
+import http from 'node:http';
+```
+to
+```javascript
+import http from 'http';
+```
+for all imported modules.
+
+For further discussions about this issue, visit:
+- https://stackoverflow.com/a/77329422/22324694
