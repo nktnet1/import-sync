@@ -50,6 +50,8 @@ Synchronously import dynamic ECMAScript Modules similar to CommonJS [require](ht
 
 Basic wrapper around [esm](https://github.com/standard-things/esm) for compatibility with both ES6 and CJS projects in NodeJS
 
+Capable of importing pure-esm libraries such as node-fetch@3 in CJS projects
+
 [![Try with Replit](https://replit.com/badge?caption=Try%20with%20Replit)](https://replit.com/@nktnet1/import-sync-example#index.js)
 
 </div>
