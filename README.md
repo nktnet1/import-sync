@@ -60,7 +60,7 @@ Capable of importing ESM-only libraries such as [node-fetch@3](https://github.co
 
 - [1. Installation](#1-installation)
 - [2. Usage](#2-usage)
-    - [2.1. relativePath](#21-relativepath)
+    - [2.1. id](#21-id)
     - [2.2. options](#22-options)
     - [2.3. return](#23-return)
 - [3. License](#3-license)
@@ -81,7 +81,7 @@ npm install import-sync
 Try with [Replit](https://replit.com/@nktnet1/import-sync-example#index.js).
 
 ```
-importSync(relativePath, options);
+importSync(id, options);
 ```
 
 <details closed>
@@ -92,7 +92,7 @@ importSync(relativePath, options);
 Importing from the same directory
 
 ```javascript
-const { someVariable, someFunction } = importSync('some-module');
+const { someVariable, someFunction } = importSync('./some-module');
 ```
 
 Importing `.mjs` file from a different directory
@@ -105,7 +105,7 @@ Using a different basePath
 
 ```javascript
 const { someFunction } = importSync(
-  'someModule',
+  './someModule',
   { basePath: process.cwd() }
 );
 ```
@@ -114,7 +114,7 @@ Using additional esm options as described in esm's [documentation](https://githu
 
 ```javascript
 const { someFunction } = importSync(
-  'someModule',
+  './someModule',
   {
     esmOptions: {
       cjs: {
@@ -125,6 +125,12 @@ const { someFunction } = importSync(
     }
   }
 );
+```
+
+Importing an ESM-only module
+
+```javascript
+const fetch = importSync('node-fetch'),
 ```
 
 </details>
