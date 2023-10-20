@@ -43,18 +43,21 @@ const createEs6Require = (esmOptions: ESMOptions) => {
  */
 const importSync = (id: string, options: Options = {}) => {
   const defaultOptions: Required<Options> = {
-    basePath: require.main?.path || '',
+    basePath: require.main?.path ?? '',
     esmOptions: {},
   };
   const opts = { ...defaultOptions, ...options };
-  const filePath = path.join(opts.basePath, id);
+  let modulePath = id;
+  if (/^\.\.?\//.test(id)) {
+    modulePath = path.join(opts.basePath, id);
+  }
   const es6Require = createEs6Require(opts.esmOptions);
   try {
-    return es6Require(filePath);
+    return es6Require(modulePath);
   } catch (error: any) {
     throw new Error(`
         Failed to import from:
-            ${filePath}.
+            ${modulePath}.
         Options:
             ${JSON.stringify(options)}
         Require error message:
