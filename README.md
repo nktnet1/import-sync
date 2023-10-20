@@ -36,7 +36,7 @@
 
 [![Downloads Total](https://badgen.net/npm/dt/import-sync)](https://moiva.io/?npm=import-sync)
 &nbsp;
-[![Downloads Total](https://badgen.net/npm/dy/import-sync)](https://moiva.io/?npm=import-sync)
+[![Downloads Yearly](https://badgen.net/npm/dy/import-sync)](https://moiva.io/?npm=import-sync)
 &nbsp;
 [![Downloads Monthly](https://badgen.net/npm/dm/import-sync)](https://moiva.io/?npm=import-sync)
 &nbsp;
