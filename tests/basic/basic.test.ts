@@ -17,8 +17,8 @@ test('ESM import function', () => {
   expect(basic.sum(1, 2)).toStrictEqual(3);
 });
 
-test('ESM import minimal relativePath (name-only)', () => {
-  expect(importSync('basic').helloString).toStrictEqual('helloworld');
+test('ESM no extension relativePath', () => {
+  expect(importSync('./basic').helloString).toStrictEqual('helloworld');
 });
 
 test('No such file', () => {

@@ -6,6 +6,6 @@ test('ESM import with default options', () => {
 });
 
 test('ESM import with different base path', () => {
-  const exampleMjs = importSync('tests/basic/basic', { basePath: process.cwd() });
+  const exampleMjs = importSync('./tests/basic/basic', { basePath: process.cwd() });
   expect(exampleMjs.helloString).toStrictEqual('helloworld');
 });
