@@ -4,7 +4,7 @@
     "type": "git",
     "url": "https://github.com/nktnet1/import-sync"
   },
-  "version": "2.0.0",
+  "version": "2.0.1",
   "files": [
     "dist"
   ],
@@ -42,7 +42,7 @@
   "license": "MIT",
   "description": "Synchronously import dynamic ECMAScript Modules similar to CommonJS require. Basic wrapper around esm for compatibility with both ES6 and CJS projects in NodeJS.",
   "devDependencies": {
-    "@types/esm": "^3.2.0",
+    "@types/esm": "^3.2.1",
     "@types/jest": "^29.5.6",
     "@types/node": "^20.8.7",
     "@typescript-eslint/eslint-plugin": "^6.8.0",

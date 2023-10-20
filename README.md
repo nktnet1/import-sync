@@ -50,7 +50,7 @@ Synchronously import dynamic ECMAScript Modules similar to CommonJS [require](ht
 
 Basic wrapper around [esm](https://github.com/standard-things/esm) for compatibility with both ES6 and CJS projects in NodeJS
 
-Capable of importing pure-esm libraries such as node-fetch@3 in CJS projects
+Capable of importing pure-esm libraries such as [node-fetch@3](https://github.com/node-fetch/node-fetch#commonjs) in CJS projects
 
 [![Try with Replit](https://replit.com/badge?caption=Try%20with%20Replit)](https://replit.com/@nktnet1/import-sync-example#index.js)
 
@@ -154,15 +154,18 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
   <tr>
     <td>basePath</td>
     <td>
-      Absolute path to the module's directory. The basePath option will only take effect if the given <code>id</code> starts with <code>./</code> or <code>../</code>. For example,
+      Absolute path to the module's directory.
+      The basePath option will only take effect if the given <code>id</code> starts with <code>./</code> or <code>../</code>.
+      <br/>
+      For example,
       <ul>
-        <li>✅ <code>./localModule</code></li>
-        <li>✅ <code>../src/localModule.mjs</code></li>
+        <li>✅ <code>./localLib</code></li>
+        <li>✅ <code>../src/localLib</code></li>
       </ul>
       and not
       <ul>
-        <li>❌ <code>/home/user/localModule</code></li>
-        <li>❌ <code>localModule</code></li>
+        <li>❌ <code>/home/user/localLib</code></li>
+        <li>❌ <code>localLib.mjs</code></li>
         <li>❌ <code>node-fetch</code></li>
       </ul>
     </td>

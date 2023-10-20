@@ -6,7 +6,7 @@ test('ESM import with default relative path', () => {
 });
 
 test('ESM import with absolute path', () => {
-  const exampleMjs = importSync(process.cwd() + '/tests/basic/basic');
+  const exampleMjs = importSync(`${process.cwd()}/tests/basic/basic`);
   expect(exampleMjs.helloString).toStrictEqual('helloworld');
 });
 
