@@ -6,6 +6,7 @@
     "esModuleInterop": true,
     "lib": ["es5", "es2015", "esnext", "dom"],
     "types": ["node", "jest"],
+    "module": "ESNext",
     "moduleResolution": "node",
     "noImplicitAny": true,
     "noUnusedLocals": true,
