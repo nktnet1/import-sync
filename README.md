@@ -144,6 +144,7 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
 - `'./dogs.mjs'`
 - `'./minimal'`
     -  `importSync` will look for `'./minimal.js'` before `'./minimal.mjs'`
+    -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs]`
 - `'node-fetch'`
     - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) in your cjs project
 

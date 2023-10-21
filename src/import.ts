@@ -2,7 +2,7 @@ import esm from 'esm';
 import path from 'path';
 import fs from 'fs';
 import { ESMOptions, Options } from './types';
-import { getCallerFilePath } from './files';
+import { findModuleFile, getCallerFilePath } from './files';
 
 /**
  * Creates an esm-compatible require function that can import ES Modules
@@ -48,10 +48,7 @@ const importSync = (id: string, options: Options = {}) => {
     esmOptions: {},
   };
   const opts = { ...defaultOptions, ...options };
-  let modulePath = id;
-  if (/^\.\.?\//.test(id)) {
-    modulePath = path.join(opts.basePath, id);
-  }
+  const modulePath = /^\.\.?\//.test(id) ? findModuleFile(id, opts.basePath) : id;
   const es6Require = createEs6Require(opts.esmOptions);
   try {
     return es6Require(modulePath);
