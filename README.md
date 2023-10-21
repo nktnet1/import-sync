@@ -143,8 +143,7 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
 - `'../animals/cats.js'`
 - `'./dogs.mjs'`
 - `'./minimal'`
-    -  `importSync` will look for `'./minimal.js'` before `'./minimal.mjs'`
-    -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs]`
+    -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs, .ts]`
 - `'node-fetch'`
     - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) in your cjs project
 
@@ -246,12 +245,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## 4. Limitations
 
-One known non-issue is that in [jest](https://jestjs.io/), calling `importSync` on
-a CommonJS module returns an empty object.
-
-There are currently no plans to fix this issue, as the built-in NodeJS
-[require](https://nodejs.org/api/modules.html#requireid) function should simply be used
-instead when importing CommonJS modules.
+There is currently no known limitations.
 
 ## 5. Caveats
 

@@ -49,9 +49,12 @@ const importSync = (id: string, options: Options = {}) => {
   };
   const opts = { ...defaultOptions, ...options };
   const modulePath = /^\.\.?\//.test(id) ? findModuleFile(id, opts.basePath) : id;
+
   const es6Require = createEs6Require(opts.esmOptions);
+
+  let importedModule: any;
   try {
-    return es6Require(modulePath);
+    importedModule = es6Require(modulePath);
   } catch (error: any) {
     throw new Error(`
         Failed to import from:
@@ -62,6 +65,15 @@ const importSync = (id: string, options: Options = {}) => {
             ${error.stack}
     `);
   }
+
+  // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS into Jest
+  if (Object.keys(importedModule).length === 0) {
+    try {
+      const basicModule = require(modulePath);
+      importedModule = Object.keys(basicModule).length > 0 ? basicModule : importedModule;
+    } catch (error) { /* nothing to do */ }
+  }
+  return importedModule;
 };
 
 export default importSync;
