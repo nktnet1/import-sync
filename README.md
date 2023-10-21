@@ -145,7 +145,7 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
 - `'./minimal'`
     -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs, .ts]`
 - `'node-fetch'`
-    - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) in your cjs project
+    - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) into your cjs project
 
 ### 2.2. options
 
@@ -245,7 +245,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## 4. Limitations
 
-There is currently no known limitations.
+There are currently no known limitations.
 
 ## 5. Caveats
 
