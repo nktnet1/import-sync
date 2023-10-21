@@ -66,7 +66,7 @@ const esmImport = (modulePath: string, options: Options) => {
  */
 const importSync = (id: string, options: Options = {}) => {
   const basePath = options.basePath ?? getCallerDirname();
-  const modulePath = /^\.\.?\//.test(id) ? findModuleFile(id, basePath) : id;
+  const modulePath = /^\.\.?\//.test(id) ? findModuleFile(basePath, id) : id;
   const importedModule = esmImport(modulePath, options);
 
   if (Object.keys(importedModule).length > 0) {

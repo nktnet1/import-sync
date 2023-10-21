@@ -30,25 +30,31 @@ export const getCallerDirname = (): string => {
  * Find the module file path by checking for available extensions
  * as defined by VALID_FILE_EXTENSIONS
  *
- * @param {string} modulePath - The path to the module
- * @param {string} basePath - The base path for the module
- * @returns {string} The resolved file path
- * @throws {Error} If the file is not found
+ * @param {string} filePath The absolute path to the file
+ * @returns {string} The resolved file path with appended extension
+ * @throws {Error} If the file path does not match any valid extensions
  */
-export const findModuleFile = (modulePath: string, basePath: string): string => {
-  const filePath = path.join(basePath, modulePath);
-  if (fs.existsSync(filePath)) {
-    return filePath;
-  }
-  if (!path.extname(filePath)) {
-    for (const ext of VALID_FILE_EXTENSIONS) {
-      const extFilePath = path.join(basePath, `${modulePath}${ext}`);
-      if (fs.existsSync(extFilePath)) {
-        return extFilePath;
-      }
+const findFileWithExtensions = (filePath: string): string => {
+  for (const ext of VALID_FILE_EXTENSIONS) {
+    const extFilePath = `${filePath}${ext}`;
+    if (fs.existsSync(extFilePath)) {
+      return extFilePath;
     }
   }
   throw new Error(
     `No such file '${filePath}' with matching extensions [${VALID_FILE_EXTENSIONS}]`
   );
+};
+
+/**
+ * Find the module file path
+ *
+ * @param {string} modulePath - The path to the module
+ * @param {string} basePath - The base path for the module
+ * @returns {string} The resolved file path
+ * @throws {Error} If the file is not found
+ */
+export const findModuleFile = (basePath: string, modulePath: string): string => {
+  const filePath = path.join(basePath, modulePath);
+  return fs.existsSync(filePath) ? filePath : findFileWithExtensions(filePath);
 };
