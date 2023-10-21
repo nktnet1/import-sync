@@ -10,14 +10,20 @@ import { VALID_FILE_EXTENSIONS } from './config';
  *
  * @returns {string} absolute path or an empty string if no caller
  */
-export const getCallerFilePath = (): string => {
+export const getCallerDirname = (): string => {
   const orig = Error.prepareStackTrace;
   Error.prepareStackTrace = (_, stack) => stack;
   const err = new Error();
-  Error.captureStackTrace(err, getCallerFilePath);
+  Error.captureStackTrace(err, getCallerDirname);
   const stack = err.stack as any;
   Error.prepareStackTrace = orig;
-  return stack[1].getFileName();
+  const callerFilePath = stack[1].getFileName();
+  /* istanbul ignore next */
+  return path.dirname(
+    callerFilePath.startsWith('file://')
+      ? callerFilePath.substring(7)
+      : callerFilePath
+  );
 };
 
 /**
