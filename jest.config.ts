@@ -9,7 +9,7 @@ const config: Config = {
   detectOpenHandles: true,
   testMatch: ['**/*.test.js', '**/*.test.cjs', '**/*.test.mjs', '**/*.test.ts'],
   transform: {
-    '^.+\\.(ts|mjs|js|cjs)$': 'ts-jest',
+    '^.+\\.(ts)$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node', 'cjs', 'mjs'],
   collectCoverageFrom: ['src/**/*.ts'],
