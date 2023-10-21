@@ -9,7 +9,7 @@ import { findModuleFile, getCallerDirname } from './files';
  * @returns an ESM-compatible require function
  */
 /* istanbul ignore next */
-const createEs6Require = (esmOptions: ESMOptions) => {
+const createEsmRequire = (esmOptions: ESMOptions) => {
   /**
    * Removes the error for "[ERR_REQUIRE_ESM]: require() of ES Module", as per
    * - https://github.com/standard-things/esm/issues/855#issuecomment-657982788
@@ -34,26 +34,16 @@ const createEs6Require = (esmOptions: ESMOptions) => {
 };
 
 /**
- * Imports ES6 modules synchronously similar to require in CommonJS
- * Can be used in both ES6 and CommonJS projects
+ * Returns an ESM-imported module
  *
- * @param relativePath - the name or relative path of the module, e.g. ./arrays
- * @param {Options} [options] - options as defined in types.ts
- * @returns the imported module
+ * @param modulePath absolute path or id of the module to import
+ * @param options same options as importSync
+ * @returns the esm imported module
  */
-const importSync = (id: string, options: Options = {}) => {
-  const defaultOptions: Required<Options> = {
-    basePath: getCallerDirname(),
-    esmOptions: {},
-  };
-  const opts = { ...defaultOptions, ...options };
-  const modulePath = /^\.\.?\//.test(id) ? findModuleFile(id, opts.basePath) : id;
-
-  const es6Require = createEs6Require(opts.esmOptions);
-
-  let importedModule: any;
+const esmImport = (modulePath: string, options: Options) => {
+  const esmRequire = createEsmRequire(options.esmOptions);
   try {
-    importedModule = es6Require(modulePath);
+    return esmRequire(modulePath);
   } catch (error: any) {
     throw new Error(`
         Failed to import from:
@@ -64,14 +54,34 @@ const importSync = (id: string, options: Options = {}) => {
             ${error.stack}
     `);
   }
+};
 
-  // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS into Jest
-  if (Object.keys(importedModule).length === 0) {
-    try {
-      const basicModule = require(modulePath);
-      importedModule = Object.keys(basicModule).length > 0 ? basicModule : importedModule;
-    } catch (error) { /* nothing to do */ }
+/**
+ * Imports ES6 modules synchronously similar to require in CommonJS
+ * Can be used in both ES6 and CommonJS projects
+ *
+ * @param relativePath - the name or relative path of the module, e.g. ./arrays
+ * @param {Options} [options] - options as defined in types.ts
+ * @returns the imported module
+ */
+const importSync = (id: string, options: Options = {}) => {
+  const basePath = options.basePath ?? getCallerDirname();
+  const modulePath = /^\.\.?\//.test(id) ? findModuleFile(id, basePath) : id;
+  const importedModule = esmImport(modulePath, options);
+
+  if (Object.keys(importedModule).length > 0) {
+    return importedModule;
   }
+  // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS into Jest
+  try {
+    const basicModule = require(modulePath);
+    if (Object.keys(basicModule).length > 0) {
+      return basicModule;
+    }
+  } catch (error) {
+    /* nothing to do */
+  }
+
   return importedModule;
 };
 

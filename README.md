@@ -193,7 +193,7 @@ process.cwd()
 }
 </pre>
     </td>
-    <td><code>{}</code></td>
+    <td><code>undefined</code></td>
   </tr>
 
 </table>
