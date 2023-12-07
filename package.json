@@ -43,7 +43,7 @@
   "description": "Synchronously import dynamic ECMAScript Modules similar to CommonJS require. Basic wrapper around esm for compatibility with both ESM and CJS projects in NodeJS.",
   "devDependencies": {
     "@types/esm": "^3.2.2",
-    "@types/jest": "^29.5.10",
+    "@types/jest": "^29.5.11",
     "@types/node": "^20.10.3",
     "@typescript-eslint/eslint-plugin": "^6.13.2",
     "@typescript-eslint/parser": "^6.13.2",
