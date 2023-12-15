@@ -1,5 +1,6 @@
-import esm from 'esm';
+import esm from '@httptoolkit/esm';
 import fs from 'fs';
+
 import { ESMOptions, Options } from './types';
 import { findModuleFile, getCallerDirname } from './files';
 
