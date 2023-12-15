@@ -13,13 +13,13 @@
   "scripts": {
     "test": "jest",
     "tc": "jest --coverage",
-    "lint": "eslint './**/*.ts'",
-    "lf": "eslint --fix './**/*.ts'",
+    "lint": "eslint --fix './**/*.ts'",
     "tsc": "tsc --noEmit",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
     "build:esm": "tsc",
     "build:cjs": "tsc --module CommonJS --outDir dist/cjs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "husky install"
   },
   "keywords": [
     "ecmascript",
@@ -42,6 +42,8 @@
   "license": "MIT",
   "description": "Synchronously import dynamic ECMAScript Modules similar to CommonJS require. Basic wrapper around esm for compatibility with both ESM and CJS projects in NodeJS.",
   "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
     "@types/esm": "^3.2.2",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.10.4",
@@ -49,6 +51,7 @@
     "@typescript-eslint/parser": "^6.14.0",
     "eslint": "^8.55.0",
     "eslint-plugin-jest": "^27.6.0",
+    "husky": "^8.0.3",
     "jest": "^29.7.0",
     "node-fetch": "^3.3.2",
     "ts-jest": "^29.1.1",
