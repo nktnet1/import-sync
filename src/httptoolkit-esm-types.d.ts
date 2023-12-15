@@ -1,4 +1,4 @@
 declare module '@httptoolkit/esm' {
-    import * as Esm from 'esm';
+    import Esm from 'esm';
     export = Esm;
 }

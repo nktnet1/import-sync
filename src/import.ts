@@ -55,6 +55,7 @@ const importSync = (id: string, options: Options = {}) => {
   // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS into Jest
   try {
     const basicModule = require(modulePath);
+    /* istanbul ignore next */
     if (Object.keys(basicModule).length > 0) {
       return basicModule;
     }
