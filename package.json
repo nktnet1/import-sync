@@ -59,6 +59,6 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "esm": "^3.2.25"
+    "@httptoolkit/esm": "^3.3.0"
   }
 }
