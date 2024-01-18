@@ -160,8 +160,7 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
   <tr>
     <td>basePath</td>
     <td>
-      Absolute path to the module's directory.
-      The basePath option will only take effect if the given <code>id</code> starts with <code>./</code> or <code>../</code>.
+      This will only take effect if the given <code>id</code> starts with <code>./</code> or <code>../</code>.
       <br/>
       For example,
       <ul>
@@ -174,10 +173,11 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
         <li>❌ <code>localLib.mjs</code></li>
         <li>❌ <code>node-fetch</code></li>
       </ul>
+      The ❌ examples above will be interpreted as either absolute paths or library imports.
     </td>
     <td>
 <pre>
-process.cwd()
+./myModule
 </pre>
     </td>
     <td><code>__dirname</code></td>
