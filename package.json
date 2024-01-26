@@ -42,8 +42,8 @@
   "license": "MIT",
   "description": "Synchronously import dynamic ECMAScript Modules similar to CommonJS require. Basic wrapper around esm for compatibility with both ESM and CJS projects in NodeJS.",
   "devDependencies": {
-    "@commitlint/cli": "^18.5.0",
-    "@commitlint/config-conventional": "^18.5.0",
+    "@commitlint/cli": "^18.6.0",
+    "@commitlint/config-conventional": "^18.6.0",
     "@types/esm": "^3.2.2",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.11.6",
