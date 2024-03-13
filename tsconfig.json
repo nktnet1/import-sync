@@ -16,7 +16,5 @@
     "skipLibCheck": true,
     "target": "ES6"
   },
-  "include": [
-    "src/**/*.ts"
-  ]
+  "include": [ "src/**/*.ts" , "types/**/*.d.ts" ]
 }
