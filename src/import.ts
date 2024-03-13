@@ -1,17 +1,7 @@
 import esm from '@httptoolkit/esm';
 
-import { ESMOptions, Options } from './types';
+import { Options } from './types';
 import { findModuleFile, getCallerDirname } from './files';
-
-/**
- * Creates an esm-compatible require function that can import ES Modules
- *
- * @returns an ESM-compatible require function
- */
-/* istanbul ignore next */
-const createEsmRequire = (esmOptions: ESMOptions) => {
-  return esm(module, esmOptions);
-};
 
 /**
  * Returns an ESM-imported module
@@ -21,7 +11,7 @@ const createEsmRequire = (esmOptions: ESMOptions) => {
  * @returns the esm imported module
  */
 const esmImport = (modulePath: string, options: Options) => {
-  const esmRequire = createEsmRequire(options.esmOptions);
+  const esmRequire = esm(module, options.esmOptions);
   try {
     return esmRequire(modulePath);
   } catch (error: any) {
