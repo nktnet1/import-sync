@@ -16,12 +16,12 @@ const esmImport = (modulePath: string, options: Options) => {
     return esmRequire(modulePath);
   } catch (error: any) {
     throw new Error(`
-        Failed to import from:
-            ${modulePath}.
-        Options:
-            ${JSON.stringify(options)}
-        Require error message:
-            ${error.stack}
+Failed to import from:
+  ${modulePath}.
+Options:
+  ${JSON.stringify(options)}
+Require error message:
+  ${error.stack}
     `);
   }
 };
