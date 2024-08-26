@@ -322,6 +322,6 @@ For further discussions about this issue, visit:
 ### 2023-12-16
 
 As of version 2.2.0, **import-sync** has switched from using the archived [esm](https://github.com/standard-things/esm) package to the fork [@httptoolkit/esm](https://github.com/httptoolkit/esm). For further details, please see:
-- issue #37
-- merge request #38
+- issue [#37](https://github.com/nktnet1/import-sync/issues/37)
+- merge request [#38](https://github.com/nktnet1/import-sync/pull/38)
 
