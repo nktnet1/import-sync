@@ -69,6 +69,7 @@ Capable of importing ESM-only libraries such as [node-fetch@3](https://github.co
     - [5.1. Idea](#51-idea)
     - [5.2. Discovery](#52-approach)
     - [5.3. Result](#53-result)
+- [6. Updates](#6-updates)
 
 ## 1. Installation
 
@@ -313,3 +314,14 @@ for all imported modules.
 
 For further discussions about this issue, visit:
 - https://stackoverflow.com/a/77329422/22324694
+
+---
+
+## 6. Updates
+
+### 2023-12-16
+
+As of version 2.2.0, **import-sync** has switched from using the archived [esm](https://github.com/standard-things/esm) package to the fork [@httptoolkit/esm](https://github.com/httptoolkit/esm). For further details, please see:
+- issue #37
+- merge request #38
+
