@@ -69,7 +69,8 @@ Capable of importing ESM-only libraries such as [node-fetch@3](https://github.co
     - [5.1. Idea](#51-idea)
     - [5.2. Discovery](#52-approach)
     - [5.3. Result](#53-result)
-- [6. Updates](#6-updates)
+- [6. Major Changes](#6-major-changes)
+    - [6.1. 2023-12-16](#61-2023-12-16)
 
 ## 1. Installation
 
@@ -317,11 +318,11 @@ For further discussions about this issue, visit:
 
 ---
 
-## 6. Updates
+## 6. Major Changes
 
-### 2023-12-16
+### 6.1. 2023-12-16
 
-As of version 2.2.0, **import-sync** has switched from using the archived [esm](https://github.com/standard-things/esm) package to the fork [@httptoolkit/esm](https://github.com/httptoolkit/esm). For further details, please see:
+As of version 2.2.0, **import-sync** has switched from using the archived [esm](https://github.com/standard-things/esm) package to the fork [@httptoolkit/esm](https://github.com/httptoolkit/esm). For further details, please see
 - issue [#37](https://github.com/nktnet1/import-sync/issues/37)
 - merge request [#38](https://github.com/nktnet1/import-sync/pull/38)
 
