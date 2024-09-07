@@ -19,7 +19,7 @@
     "build:esm": "tsc",
     "build:cjs": "tsc --module CommonJS --outDir dist/cjs",
     "prepublishOnly": "npm run build",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "keywords": [
     "ecmascript",
