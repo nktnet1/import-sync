@@ -251,6 +251,8 @@ There are currently no known limitations.
 
 ## 5. Caveats
 
+> Please note that loading [ECMAScript Modules using require()](https://nodejs.org/api/modules.html#loading-ecmascript-modules-using-require) are soon to be supported in NodeJS natively.
+
 ### 5.1. Idea
 
 **import-sync** was created to enable the implementation of a global dryrun script that can be run by students undertaking
