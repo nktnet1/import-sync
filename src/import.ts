@@ -17,7 +17,7 @@ const esmImport = (modulePath: string, options: Options) => {
   } catch (error: any) {
     throw new Error(`
 Failed to import from:
-  ${modulePath}.
+  ${modulePath}
 Options:
   ${JSON.stringify(options)}
 Require error message:
