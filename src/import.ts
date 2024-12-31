@@ -1,7 +1,7 @@
 import esm from '@httptoolkit/esm';
 
-import { Options } from './options';
 import { findModuleFile, getCallerDirname } from './files';
+import { Options } from './options';
 
 /**
  * Returns an ESM-imported module
@@ -44,12 +44,13 @@ const importSync = (id: string, options: Options = {}) => {
   }
   // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS into Jest
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const basicModule = require(modulePath);
     /* istanbul ignore next */
     if (Object.keys(basicModule).length > 0) {
       return basicModule;
     }
-  } catch (error) {
+  } catch (_error) {
     /* nothing to do */
   }
 

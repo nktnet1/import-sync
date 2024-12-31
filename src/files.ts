@@ -20,9 +20,7 @@ export const getCallerDirname = (): string => {
   const callerFilePath = stack[1].getFileName();
   /* istanbul ignore next */
   return path.dirname(
-    callerFilePath.startsWith('file://')
-      ? callerFilePath.substring(7)
-      : callerFilePath
+    callerFilePath.startsWith('file://') ? callerFilePath.substring(7) : callerFilePath,
   );
 };
 
@@ -41,9 +39,7 @@ const findFileWithExtensions = (filePath: string): string => {
       return extFilePath;
     }
   }
-  throw new Error(
-    `No such file '${filePath}' with matching extensions [${VALID_FILE_EXTENSIONS}]`
-  );
+  throw new Error(`No such file '${filePath}' with matching extensions [${VALID_FILE_EXTENSIONS}]`);
 };
 
 /**

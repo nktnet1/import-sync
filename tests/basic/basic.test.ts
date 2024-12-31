@@ -10,7 +10,8 @@ test('ESM import primitive number array', () => {
 });
 
 test('ESM import shallow object', () => {
-  expect(basic.object).toStrictEqual({ key1: 'value1', key2: 2 });
+  // esm "serialises to the same string" starting from node v22 with .toStrictEqual
+  expect(basic.object).toEqual({ key1: 'value1', key2: 2 });
 });
 
 test('ESM import function', () => {
