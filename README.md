@@ -123,7 +123,7 @@ const { someFunction } = importSync(
         cache: true
       },
       mode: 'all',
-      force: 'true',
+      force: true,
     }
   }
 );
