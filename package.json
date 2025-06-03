@@ -70,11 +70,5 @@
   "dependencies": {
     "@httptoolkit/esm": "^3.3.1"
   },
-  "packageManager": "pnpm@10.8.1",
-  "pnpm": {
-    "overrides": {
-      "@babel/helpers@<7.26.10": "^7.26.10",
-      "tar-fs@<2.1.2": "^2.1.2"
-    }
-  }
+  "packageManager": "pnpm@10.8.1"
 }
