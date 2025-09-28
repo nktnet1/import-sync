@@ -8,16 +8,12 @@
   "files": [
     "dist"
   ],
-  "main": "dist/cjs/index.js",
-  "module": "dist/esm/index.js",
   "scripts": {
     "test": "jest",
     "tc": "jest --coverage",
     "lint": "eslint --fix './**/*.ts'",
     "tsc": "tsc --noEmit",
-    "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "build:esm": "tsc",
-    "build:cjs": "tsc --module CommonJS --outDir dist/cjs",
+    "build": "tsdown",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
   },
@@ -65,10 +61,21 @@
     "node-fetch": "^3.3.2",
     "ts-jest": "^29.4.4",
     "ts-node": "^10.9.2",
+    "tsdown": "^0.15.5",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "@httptoolkit/esm": "^3.3.2"
   },
-  "packageManager": "pnpm@10.17.1"
+  "packageManager": "pnpm@10.17.1",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  }
 }
