@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "target": "ES6"
   },
-  "include": [ "src/**/*.ts" , "types/**/*.d.ts", "tsdown.config.ts", ]
+  "include": [ "src/**/*.ts" , "types/**/*.d.ts", "tsdown.config.ts" ]
 }

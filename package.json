@@ -1,5 +1,6 @@
 {
   "name": "import-sync",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/nktnet1/import-sync"
