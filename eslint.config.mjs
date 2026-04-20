@@ -24,7 +24,6 @@ const eslintFlatConfig = [
     languageOptions: {
       globals: {
         ...globals.node,
-        ...globals.jest,
       },
     },
   },

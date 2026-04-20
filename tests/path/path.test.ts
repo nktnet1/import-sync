@@ -1,3 +1,4 @@
+import { test, expect } from '@jest/globals';
 import importSync from '../../src';
 
 test('ESM import with default relative path', () => {

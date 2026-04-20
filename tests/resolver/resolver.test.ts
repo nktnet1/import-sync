@@ -1,3 +1,4 @@
+import { test, expect } from '@jest/globals';
 import importSync from '../../src';
 
 test('Can resolve module imports that are pure-esm, e.g. node-fetch', () => {
