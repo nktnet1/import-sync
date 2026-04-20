@@ -330,4 +330,4 @@ As of version 2.2.0, **import-sync** has switched from using the archived [esm](
 
 ### 6.2. 2026-04-20
 
-As of version 2.2.0, **import-sync** has switched to the fork [esm-sync](https://github.com/nktnet1/esm-sync).
+As of version 2.2.4, **import-sync** has switched to the fork [esm-sync](https://github.com/nktnet1/esm-sync).
