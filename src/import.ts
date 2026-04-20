@@ -16,6 +16,7 @@ const esmImport = (modulePath: string, options: Options) => {
     return esmRequire(modulePath);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.stack : error;
+    // eslint-disable-next-line preserve-caught-error
     throw new Error(
       `
 Failed to import from:
@@ -24,7 +25,6 @@ Options:
   ${JSON.stringify(options)}
 Require error message:
   ${message}`,
-      { cause: error },
     );
   }
 };
