@@ -1,4 +1,4 @@
-import esm from '@httptoolkit/esm';
+import esm from 'esm-sync';
 
 export type ESMOptions = Parameters<typeof esm>[1];
 

@@ -324,7 +324,18 @@ For further discussions about this issue, visit:
 
 ### 6.1. 2023-12-16
 
-As of version 2.2.0, **import-sync** has switched from using the archived [esm](https://github.com/standard-things/esm) package to the fork [@httptoolkit/esm](https://github.com/httptoolkit/esm). For further details, please see
+As of version 2.2.0, **import-sync** has switched from using the archived [esm](https://github.com/standard-things/esm) package to the fork [@httptoolkit/esm](https://github.com/httptoolkit/esm). For further details, please see:
 - issue [#37](https://github.com/nktnet1/import-sync/issues/37)
 - merge request [#38](https://github.com/nktnet1/import-sync/pull/38)
 
+### 6.2. 2026-04-20
+
+As of version 3.0.0, **import-sync** has switched to the fork [esm-sync](https://github.com/nktnet1/esm-sync).
+
+## 7. Alternative
+
+Jiti (Runtime TypeScript and ESM support for Node.js):
+
+- https://github.com/unjs/jiti
+
+While synchronous import is deprecated in Jiti, it still works reliably for many use cases.

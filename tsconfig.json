@@ -5,16 +5,17 @@
     "declaration": true,
     "esModuleInterop": true,
     "lib": ["es5", "es2015", "esnext", "dom"],
-    "types": ["node", "jest"],
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "noImplicitAny": true,
     "noUnusedLocals": true,
+    "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "outDir": "dist/esm",
-    "skipLibCheck": true,
     "target": "ES6"
   },
-  "include": [ "src/**/*.ts" , "types/**/*.d.ts" ]
+  "include": [
+    "src/**/*.ts",
+    "types/**/*.d.ts"
+  ]
 }
