@@ -1,4 +1,4 @@
-import esm from '@httptoolkit/esm';
+import esm from 'esm-sync';
 
 import { findModuleFile, getCallerDirname } from './files';
 import { Options } from './options';

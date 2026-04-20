@@ -13,9 +13,9 @@ importers:
 
   .:
     dependencies:
-      '@httptoolkit/esm':
-        specifier: ^3.3.2
-        version: 3.3.2
+      esm-sync:
+        specifier: 3.3.3-beta.1
+        version: 3.3.3-beta.1
     devDependencies:
       '@commitlint/cli':
         specifier: ^20.5.0
@@ -29,9 +29,6 @@ importers:
       '@eslint/js':
         specifier: ^9.39.4
         version: 9.39.4
-      '@types/httptoolkit__esm':
-        specifier: ^3.3.0
-        version: 3.3.0
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
@@ -419,10 +416,6 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@httptoolkit/esm@3.3.2':
-    resolution: {integrity: sha512-mpB6FdMtn+c17RA6b6PDdsJXBLHG4P8ZJFK7sjS4IZn689kcOwjt90Ct+oxTaYo9pvCSb/GeTSjYEzoBv+bnbQ==}
-    engines: {node: '>=6'}
-
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
     engines: {node: '>=18.18.0'}
@@ -726,9 +719,6 @@ packages:
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
-
-  '@types/httptoolkit__esm@3.3.0':
-    resolution: {integrity: sha512-d8KultwVozybFoaEdjDWA0s0XKkw75MRELG7RbJdCeAKmhvKlz5uIfeGNZzsHATuPY7JKyklo7zPEPBKxGt7TQ==}
 
   '@types/istanbul-lib-coverage@2.0.6':
     resolution: {integrity: sha512-2QF/t/auWm0lsy8XtKVPG19v3sSOQlJe/YHZgfjb/KBBHOGSV+J2q/S671rcq9uTBrLAXmZpqJiaQbMT+zNU1w==}
@@ -1501,6 +1491,10 @@ packages:
     peerDependenciesMeta:
       jiti:
         optional: true
+
+  esm-sync@3.3.3-beta.1:
+    resolution: {integrity: sha512-+/Q9yuBfCiO51FSfiu4HrqiznrXQbEJsU7GR+ZaDuvc0E7DIQL9+GoXtcu8TCwOZTOLJ8ehlQOX0P+mMtpcvXQ==}
+    engines: {node: '>=6'}
 
   espree@10.4.0:
     resolution: {integrity: sha512-j6PAQ2uUr79PZhBjP5C5fhl8e39FmRnOjsD5lGnWrFU8i2G776tBK7+nP8KuQUTTyAZUwfQqXAgrVH5MbH9CYQ==}
@@ -3359,8 +3353,6 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@httptoolkit/esm@3.3.2': {}
-
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -3726,10 +3718,6 @@ snapshots:
       '@babel/types': 7.29.0
 
   '@types/estree@1.0.8': {}
-
-  '@types/httptoolkit__esm@3.3.0':
-    dependencies:
-      '@types/node': 24.12.2
 
   '@types/istanbul-lib-coverage@2.0.6': {}
 
@@ -4569,6 +4557,10 @@ snapshots:
       jiti: 2.6.1
     transitivePeerDependencies:
       - supports-color
+
+  esm-sync@3.3.3-beta.1:
+    dependencies:
+      punycode: 2.3.1
 
   espree@10.4.0:
     dependencies:
