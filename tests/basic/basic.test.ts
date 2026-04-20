@@ -1,4 +1,5 @@
 import importSync from '../../src';
+
 const basic = importSync('./basic.mjs');
 
 test('ESM import string variable', () => {

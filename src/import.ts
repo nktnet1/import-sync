@@ -14,15 +14,18 @@ const esmImport = (modulePath: string, options: Options) => {
   const esmRequire = esm(module, options.esmOptions);
   try {
     return esmRequire(modulePath);
-  } catch (error: any) {
-    throw new Error(`
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.stack : error;
+    throw new Error(
+      `
 Failed to import from:
   ${modulePath}
 Options:
   ${JSON.stringify(options)}
 Require error message:
-  ${error.stack}
-    `);
+  ${message}`,
+      { cause: error },
+    );
   }
 };
 
