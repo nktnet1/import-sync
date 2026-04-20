@@ -5,7 +5,7 @@
     "type": "git",
     "url": "https://github.com/nktnet1/import-sync"
   },
-  "version": "2.2.4-beta.5",
+  "version": "2.2.4",
   "files": [
     "dist"
   ],
