@@ -5,7 +5,6 @@
     "declaration": true,
     "esModuleInterop": true,
     "lib": ["es5", "es2015", "esnext", "dom"],
-    "types": ["node", "jest"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noImplicitAny": true,
@@ -15,5 +14,8 @@
     "skipLibCheck": true,
     "target": "ES6"
   },
-  "include": [ "src/**/*.ts" , "types/**/*.d.ts", "tsdown.config.ts" ]
+  "include": [
+    "src/**/*.ts",
+    "types/**/*.d.ts"
+  ]
 }
