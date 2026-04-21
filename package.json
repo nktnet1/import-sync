@@ -46,8 +46,8 @@
     "@jest/globals": "^30.3.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
-    "@typescript-eslint/eslint-plugin": "^8.58.2",
-    "@typescript-eslint/parser": "^8.58.2",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
     "eslint": "^10.2.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
@@ -65,7 +65,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "esm-sync": "3.3.3"
+    "esm-sync": "3.3.4"
   },
   "packageManager": "pnpm@10.33.0",
   "main": "./dist/index.cjs",
