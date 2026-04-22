@@ -8,8 +8,6 @@
 &nbsp;
 [![Maintainability](https://api.codeclimate.com/v1/badges/aaae5cf33d58299ed722/maintainability)](https://codeclimate.com/github/nktnet1/import-sync/maintainability)
 &nbsp;
-[![Snyk Security](https://snyk.io/test/github/nktnet1/import-sync/badge.svg)](https://snyk.io/test/github/nktnet1/import-sync)
-&nbsp;
 [![GitHub top language](https://img.shields.io/github/languages/top/nktnet1/import-sync)](https://github.com/search?q=repo%3Anktnet1%2Fimport-sync++language%3ATypeScript&type=code)
 
 [![NPM Version](https://img.shields.io/npm/v/import-sync?logo=npm)](https://www.npmjs.com/package/import-sync?activeTab=versions)
@@ -30,8 +28,6 @@
 &nbsp;
 [![DeepSource](https://app.deepsource.com/gh/nktnet1/import-sync.svg/?label=active+issues&show_trend=true&token=r1frerF1-N2Mhrc7ZXIC1uNa)](https://app.deepsource.com/gh/nktnet1/import-sync/)
 &nbsp;
-[![codebeat badge](https://codebeat.co/badges/acc44573-9938-4a14-bc41-7eb6a58dffbb)](https://codebeat.co/projects/github-com-nktnet1-import-sync-main)
-&nbsp;
 [![GitHub stars](https://img.shields.io/github/stars/nktnet1/import-sync.svg?style=social)](https://github.com/nktnet1/import-sync/stargazers)
 
 [![Downloads Total](https://badgen.net/npm/dt/import-sync)](https://moiva.io/?npm=import-sync)
@@ -48,7 +44,7 @@
 
 Synchronously import dynamic ECMAScript Modules similar to CommonJS [require](https://nodejs.org/api/modules.html#requireid)
 
-Basic wrapper around [esm](https://github.com/standard-things/esm) for compatibility with both ESM and CJS projects in NodeJS
+Basic wrapper around [esm](https://github.com/nktnet1/esm-sync) for compatibility with both ESM and CJS projects in NodeJS
 
 Capable of importing ESM-only libraries such as [node-fetch@3](https://github.com/node-fetch/node-fetch#commonjs) in CJS projects
 
@@ -325,17 +321,19 @@ For further discussions about this issue, visit:
 ### 6.1. 2023-12-16
 
 As of version 2.2.0, **import-sync** has switched from using the archived [esm](https://github.com/standard-things/esm) package to the fork [@httptoolkit/esm](https://github.com/httptoolkit/esm). For further details, please see:
+
 - issue [#37](https://github.com/nktnet1/import-sync/issues/37)
 - merge request [#38](https://github.com/nktnet1/import-sync/pull/38)
 
 ### 6.2. 2026-04-20
 
-As of version 3.0.0, **import-sync** has switched to the fork [esm-sync](https://github.com/nktnet1/esm-sync).
+As of version 2.2.4, **import-sync** has switched from
+[@httptoolkit/esm](https://github.com/httptoolkit/esm) to the fork
+[esm-sync](https://github.com/nktnet1/esm-sync).
 
-## 7. Alternative
+You may also be interested [jiti](https://github.com/unjs/jiti), which provides
+a legacy (deprecated, but still reliable) method for synchronous imports.
 
-Jiti (Runtime TypeScript and ESM support for Node.js):
-
-- https://github.com/unjs/jiti
-
-While synchronous import is deprecated in Jiti, it still works reliably for many use cases.
+Support for
+[loading ECMAScript modules using require()](https://nodejs.org/api/modules.html#loading-ecmascript-modules-using-require)
+has also been added in NodeJS v20.17.0 and v22.0.0.
