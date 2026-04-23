@@ -14,8 +14,8 @@ importers:
   .:
     dependencies:
       esm-sync:
-        specifier: 3.3.4
-        version: 3.3.4
+        specifier: 3.3.5
+        version: 3.3.5
     devDependencies:
       '@commitlint/cli':
         specifier: ^20.5.0
@@ -1484,8 +1484,8 @@ packages:
       jiti:
         optional: true
 
-  esm-sync@3.3.4:
-    resolution: {integrity: sha512-sREHsPB/7OIQiI0u8rTYC+rYpxj5K9aIGN6NwOmuZR2QixINAXDEIuvwUwRdtI24FBpwnk/60aSujeDtp/f9Yg==}
+  esm-sync@3.3.5:
+    resolution: {integrity: sha512-ULAGe0/+AQWvaxLE41QLIZbld+6nyxf+p52dr7GUbSTcZjjMe/D6iafZ3GIx6PJiVXlJtVAKzIN7+SiskMYDGQ==}
     engines: {node: '>=6'}
 
   espree@10.4.0:
@@ -4542,7 +4542,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  esm-sync@3.3.4:
+  esm-sync@3.3.5:
     dependencies:
       punycode: 2.3.1
 
