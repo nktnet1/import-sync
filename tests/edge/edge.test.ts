@@ -16,6 +16,7 @@ test('Literal alias', () => {
     'module.exports': 1531,
     myVarAlias: 1531,
     '  __  :)  __  ': 1531,
+    ' 😆 ': 1531,
   });
 });
 
