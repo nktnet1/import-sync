@@ -16,8 +16,6 @@
 &nbsp;
 [![Depfu Dependencies](https://badges.depfu.com/badges/6c4074c4d23ad57ee2bfd9ff90456090/overview.svg)](https://depfu.com/github/nktnet1/import-sync?project_id=39032)
 &nbsp;
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fnktnet1%2Fimport-sync?ref=badge_shield)
-&nbsp;
 [![NPM License](https://img.shields.io/npm/l/import-sync)](https://opensource.org/license/mit/)
 &nbsp;
 [![GitHub issues](https://img.shields.io/github/issues/nktnet1/import-sync.svg?style=social)](https://github.com/nktnet1/import-sync/issues)
