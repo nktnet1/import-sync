@@ -1,8 +1,0 @@
-pull_request_rules:
-  - name: Automatic merge for depfu pull requests
-    conditions:
-      - author=depfu[bot]
-      - base=main
-    actions:
-      merge:
-        method: merge

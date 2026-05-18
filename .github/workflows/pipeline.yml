@@ -17,15 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [22.x, 20.x, 18.x]
+        node-version: [22.x, 24.x]
       fail-fast: true
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
 
@@ -35,8 +35,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Run ESLint
+      - name: Run lint
         run: pnpm lint
+
+      - name: Run format
+        run: pnpm format
 
       - name: Run tests with coverage
         run: pnpm test --coverage

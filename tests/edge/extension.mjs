@@ -1,1 +1,1 @@
-export const message = 'ECMAScript';
+export const message = "ECMAScript";

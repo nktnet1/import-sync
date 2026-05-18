@@ -1,3 +1,3 @@
 module.exports = {
-  message: 'CommonJS'
+  message: "CommonJS",
 };

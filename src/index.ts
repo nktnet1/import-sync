@@ -1,4 +1,4 @@
-import importSync from './import';
+import importSync from "./import";
 
 export default importSync;
-export type { Options, ESMOptions } from './options';
+export type { Options, ESMOptions } from "./options";

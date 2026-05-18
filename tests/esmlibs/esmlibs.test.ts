@@ -1,10 +1,12 @@
-import { test, expect } from '@jest/globals';
-import importSync from '../../src';
+import { expect, test } from "@jest/globals";
+import importSync from "../../src";
 
-test('ESM no extension relativePath', () => {
-  expect(typeof importSync('node-fetch').default).toStrictEqual('function');
+test("Esmlib importing node-fetch", () => {
+  expect(typeof importSync("node-fetch").default).toStrictEqual("function");
 });
 
-test('ESM no extension relativePath', () => {
-  expect(typeof importSync('node-datachannel').initLogger).toStrictEqual('function');
+test("Esmlib importing node-datachannel", () => {
+  expect(typeof importSync("node-datachannel").initLogger).toStrictEqual(
+    "function",
+  );
 });

@@ -1,1 +1,1 @@
-export const message = 'TypeScript';
+export const message = "TypeScript";
