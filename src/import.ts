@@ -15,6 +15,7 @@ const esmImport = (modulePath: string, options: Options) => {
   try {
     return esmRequire(modulePath);
   } catch (error: unknown) {
+    /* istanbul ignore next */
     const message = error instanceof Error ? error.stack : error;
     throw new Error(
       `

@@ -15,6 +15,7 @@ type CallSite = {
  *
  * @returns {string} absolute path or an empty string if no caller
  */
+/* istanbul ignore next 4 */
 export const getCallerDirname = (): string => {
   const orig = Error.prepareStackTrace;
   Error.prepareStackTrace = (_, stack) => stack;
@@ -22,12 +23,12 @@ export const getCallerDirname = (): string => {
   Error.captureStackTrace(err, getCallerDirname);
   const stack = err.stack as unknown as CallSite[];
   Error.prepareStackTrace = orig;
+
   const callerFilePath = stack[1].getFileName() ?? stack[1]?.getEvalOrigin();
   if (!callerFilePath) {
     throw new Error("Unknown caller file path");
   }
 
-  /* istanbul ignore next */
   return path.dirname(
     callerFilePath.startsWith("file://")
       ? callerFilePath.substring(7)
