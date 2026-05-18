@@ -1,7 +1,6 @@
-ignoredBuiltDependencies:
-  - unrs-resolver
-onlyBuiltDependencies:
-  - node-datachannel
+allowBuilds:
+  node-datachannel: true
+  unrs-resolver: false
 overrides:
   '@babel/helpers@<7.26.10': ^7.26.10
   brace-expansion@<2.0.2: ^2.0.2
