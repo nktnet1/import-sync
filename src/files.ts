@@ -1,6 +1,11 @@
-import fs from 'fs';
-import path from 'path';
-import { VALID_FILE_EXTENSIONS } from './config';
+import fs from "fs";
+import path from "path";
+import { VALID_FILE_EXTENSIONS } from "./config";
+
+type CallSite = {
+  getFileName(): string | null;
+  getEvalOrigin(): string | null;
+};
 
 /**
  * Get the file path of the caller function.
@@ -15,12 +20,18 @@ export const getCallerDirname = (): string => {
   Error.prepareStackTrace = (_, stack) => stack;
   const err = new Error();
   Error.captureStackTrace(err, getCallerDirname);
-  const stack = err.stack as any;
+  const stack = err.stack as unknown as CallSite[];
   Error.prepareStackTrace = orig;
-  const callerFilePath = stack[1].getFileName();
+  const callerFilePath = stack[1].getFileName() ?? stack[1]?.getEvalOrigin();
+  if (!callerFilePath) {
+    throw new Error("Unknown caller file path");
+  }
+
   /* istanbul ignore next */
   return path.dirname(
-    callerFilePath.startsWith('file://') ? callerFilePath.substring(7) : callerFilePath,
+    callerFilePath.startsWith("file://")
+      ? callerFilePath.substring(7)
+      : callerFilePath,
   );
 };
 
@@ -39,7 +50,9 @@ const findFileWithExtensions = (filePath: string): string => {
       return extFilePath;
     }
   }
-  throw new Error(`No such file '${filePath}' with matching extensions [${VALID_FILE_EXTENSIONS}]`);
+  throw new Error(
+    `No such file '${filePath}' with matching extensions [${VALID_FILE_EXTENSIONS}]`,
+  );
 };
 
 /**
@@ -50,7 +63,10 @@ const findFileWithExtensions = (filePath: string): string => {
  * @returns {string} The resolved file path
  * @throws {Error} If the file is not found
  */
-export const findModuleFile = (basePath: string, modulePath: string): string => {
+export const findModuleFile = (
+  basePath: string,
+  modulePath: string,
+): string => {
   const filePath = path.join(basePath, modulePath);
   return fs.existsSync(filePath) ? filePath : findFileWithExtensions(filePath);
 };

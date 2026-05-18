@@ -35,8 +35,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Run ESLint
+      - name: Run lint
         run: pnpm lint
+
+      - name: Run format
+        run: pnpm format
 
       - name: Run tests with coverage
         run: pnpm test --coverage

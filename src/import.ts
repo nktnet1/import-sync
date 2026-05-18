@@ -1,7 +1,7 @@
-import esm from 'esm-sync';
+import esm from "esm-sync";
 
-import { findModuleFile, getCallerDirname } from './files';
-import { Options } from './options';
+import { findModuleFile, getCallerDirname } from "./files";
+import { Options } from "./options";
 
 /**
  * Returns an ESM-imported module
@@ -16,7 +16,6 @@ const esmImport = (modulePath: string, options: Options) => {
     return esmRequire(modulePath);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.stack : error;
-    // eslint-disable-next-line preserve-caught-error
     throw new Error(
       `
 Failed to import from:
@@ -47,7 +46,7 @@ const importSync = (id: string, options: Options = {}) => {
   }
   // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS into Jest
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // biome-ignore lint/style/noCommonJs: allow CommonJS require fallback
     const basicModule = require(modulePath);
     /* istanbul ignore next */
     if (Object.keys(basicModule).length > 0) {

@@ -1,3 +1,3 @@
-import nodeFetch from 'node-fetch';
+import nodeFetch from "node-fetch";
 
 export { nodeFetch };

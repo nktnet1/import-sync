@@ -1,12 +1,12 @@
-import { test, expect } from '@jest/globals';
-import importSync from '../../src';
+import { test, expect } from "@jest/globals";
+import importSync from "../../src";
 
-test('Empty file', () => {
-  expect(importSync('./empty')).toMatchObject({});
+test("Empty file", () => {
+  expect(importSync("./empty")).toMatchObject({});
 });
 
-test('Broken file', () => {
-  expect(() => importSync('./broken')).toThrow(Error);
+test("Broken file", () => {
+  expect(() => importSync("./broken")).toThrow(Error);
 });
 
 test('Literal alias', () => {
@@ -21,11 +21,14 @@ test('Literal alias', () => {
 });
 
 test.each([
-  { extension: '', message: 'JavaScript' },
-  { extension: '.js', message: 'JavaScript' },
-  { extension: '.mjs', message: 'ECMAScript' },
-  { extension: '.cjs', message: 'CommonJS' },
-  { extension: '.ts', message: 'TypeScript' },
-])("Testing extension '$extension' contains message '$message'", ({ extension, message }) => {
+  { extension: "", message: "JavaScript" },
+  { extension: ".js", message: "JavaScript" },
+  { extension: ".mjs", message: "ECMAScript" },
+  { extension: ".cjs", message: "CommonJS" },
+  { extension: ".ts", message: "TypeScript" },
+])("Testing extension '$extension' contains message '$message'", ({
+  extension,
+  message,
+}) => {
   expect(importSync(`./extension${extension}`)).toMatchObject({ message });
 });
