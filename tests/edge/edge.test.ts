@@ -1,4 +1,4 @@
-import { test, expect } from "@jest/globals";
+import { expect, test } from "@jest/globals";
 import importSync from "../../src";
 
 test("Empty file", () => {
