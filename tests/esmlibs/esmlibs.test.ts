@@ -1,5 +1,5 @@
-import { expect, test } from "@jest/globals";
-import importSync from "../../src";
+import { expect, test } from "vitest";
+import importSync from "../native-import-sync";
 
 test("Esmlib importing node-fetch", () => {
   expect(typeof importSync("node-fetch").default).toStrictEqual("function");

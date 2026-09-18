@@ -6,5 +6,5 @@ name = "javascript"
   [analyzers.meta]
   environment = [
     "nodejs",
-    "jest"
+    "vitest"
   ]

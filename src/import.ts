@@ -45,7 +45,7 @@ const importSync = (id: string, options: Options = {}) => {
   if (Object.keys(importedModule).length > 0) {
     return importedModule;
   }
-  // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS into Jest
+  // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS in a test runner
   try {
     // biome-ignore lint/style/noCommonJs: allow CommonJS require fallback
     const basicModule = require(modulePath);
