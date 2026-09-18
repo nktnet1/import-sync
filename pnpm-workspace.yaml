@@ -1,4 +1,5 @@
 allowBuilds:
+  '@parcel/watcher': false
   node-datachannel: true
   unrs-resolver: false
 overrides:

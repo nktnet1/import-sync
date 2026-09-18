@@ -26,9 +26,9 @@ test.each([
   { extension: ".mjs", message: "ECMAScript" },
   { extension: ".cjs", message: "CommonJS" },
   { extension: ".ts", message: "TypeScript" },
-])("Testing extension '$extension' contains message '$message'", ({
-  extension,
-  message,
-}) => {
-  expect(importSync(`./extension${extension}`)).toMatchObject({ message });
-});
+])(
+  "Testing extension '$extension' contains message '$message'",
+  ({ extension, message }) => {
+    expect(importSync(`./extension${extension}`)).toMatchObject({ message });
+  },
+);
