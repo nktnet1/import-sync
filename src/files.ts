@@ -15,7 +15,7 @@ type CallSite = {
  *
  * @returns {string} absolute path or an empty string if no caller
  */
-/* istanbul ignore next 4 */
+/* v8 ignore next 4 -- @preserve */
 export const getCallerDirname = (): string => {
   const orig = Error.prepareStackTrace;
   Error.prepareStackTrace = (_, stack) => stack;

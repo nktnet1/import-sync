@@ -15,7 +15,7 @@ const esmImport = (modulePath: string, options: Options) => {
   try {
     return esmRequire(modulePath);
   } catch (error: unknown) {
-    /* istanbul ignore next */
+    /* v8 ignore next -- @preserve */
     const message = error instanceof Error ? error.stack : error;
     throw new Error(
       `
@@ -49,7 +49,7 @@ const importSync = (id: string, options: Options = {}) => {
   try {
     // biome-ignore lint/style/noCommonJs: allow CommonJS require fallback
     const basicModule = require(modulePath);
-    /* istanbul ignore next */
+    /* v8 ignore next -- @preserve */
     if (Object.keys(basicModule).length > 0) {
       return basicModule;
     }

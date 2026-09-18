@@ -7,7 +7,7 @@ export default defineConfig({
     include: ["**/*.test.{js,cjs,mjs,ts}"],
     exclude: [...configDefaults.exclude, "**/dist/**"],
     coverage: {
-      provider: "istanbul",
+      provider: "v8",
       include: ["src/**/*.ts"],
     },
   },
