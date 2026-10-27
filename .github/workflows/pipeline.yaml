@@ -1,0 +1,83 @@
+name: Pipeline
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/README.md"
+  pull_request:
+    branches:
+      - "*"
+    paths-ignore:
+      - "**/README.md"
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  library:
+    name: Library / ${{ matrix.os }} / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, windows-2022]
+        node-version: [22, 24, 26]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v3
+        with:
+          runtime: node@${{ matrix.node-version }}
+          install: false
+          cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+
+      # Refresh the lockfile before re-enabling frozen installs; generated
+      # lockfile changes are kept out of incremental patches.
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build and test
+        run: pnpm test
+
+  tooling:
+    name: Tooling, coverage and registry / Ubuntu / Node 24
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v3
+        with:
+          runtime: node@24
+          install: false
+          cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Check formatting and lint
+        run: pnpm check
+
+      - name: Type-check implementation and release tooling
+        run: pnpm tsc
+
+      - name: Run tests with coverage
+        run: pnpm tc
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Test registry publish/install with CJS and ESM consumers
+        run: pnpm test:verdaccio

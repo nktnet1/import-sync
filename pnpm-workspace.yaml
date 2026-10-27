@@ -1,8 +1,10 @@
 allowBuilds:
-  '@parcel/watcher': false
+  "@parcel/watcher": false
+  # The root prepare script migrates Husky's core.hooksPath before installation.
+  lefthook: false
   node-datachannel: true
   unrs-resolver: false
 overrides:
-  '@babel/helpers@<7.26.10': ^7.26.10
+  "@babel/helpers@<7.26.10": ^7.26.10
   brace-expansion@<2.0.2: ^2.0.2
   tar-fs@<2.1.3: ^2.1.3

@@ -11,14 +11,18 @@
   ],
   "scripts": {
     "test": "pnpm build && vitest run",
+    "test:verdaccio": "node script/test-verdaccio.ts",
+    "release:beta": "node script/release-beta.ts",
+    "release:pack": "node script/prepare-release-package.ts",
+    "release:publish": "node script/publish-release-package.ts",
     "tc": "pnpm build && vitest run --coverage",
     "lint": "biome lint",
     "format": "biome format",
     "check": "biome check",
-    "tsc": "tsc --noEmit",
+    "tsc": "tsc --noEmit && tsc --project tsconfig.tooling.json",
     "build": "tsdown",
     "prepublishOnly": "npm run build",
-    "prepare": "husky"
+    "prepare": "node script/install-hooks.ts"
   },
   "keywords": [
     "ecmascript",
@@ -47,12 +51,13 @@
     "@types/node": "^26.6.1",
     "@vitest/coverage-v8": "^5.0.1",
     "globals": "^17.12.0",
-    "husky": "^9.1.7",
+    "lefthook": "^2.2.2",
     "node-datachannel": "^0.33.4",
     "node-fetch": "^3.3.2",
     "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "verdaccio": "6.10.4"
   },
   "dependencies": {
     "esm-sync": "^3.3.7"
