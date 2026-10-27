@@ -1,3 +1,13 @@
 node_modules
 dist/**/*
 coverage
+.release/
+release-packages/
+release-metadata/
+
+*.bundle
+*.patch
+*.tar.gz
+
+.DS_Store
+

@@ -1,0 +1,87 @@
+name: Pipeline
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/README.md"
+  pull_request:
+    branches:
+      - "*"
+    paths-ignore:
+      - "**/README.md"
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  library:
+    name: Library / ${{ matrix.os }} / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, windows-2022]
+        node-version: [22, 24, 26]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          runtime: node@${{ matrix.node-version }}
+          install: false
+          cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build and test library
+        run: pnpm test --exclude "tests/tooling/**"
+
+  tooling:
+    name: Tooling, release, coverage and registry / Ubuntu / Node 24
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Verdaccio exercises npm pack/publish/install. pnpm-managed Node omits npm.
+      - name: Set up Node.js and npm
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Set up pnpm
+        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          install: false
+          cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Check formatting and lint
+        run: pnpm check
+
+      - name: Type-check implementation and release tooling
+        run: pnpm typecheck
+
+      - name: Run tests with coverage
+        run: pnpm tc
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Test registry publish/install with CJS and ESM consumers
+        run: pnpm test:verdaccio

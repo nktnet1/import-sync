@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/pipeline.yaml
+    secrets: inherit
+
+  package:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js and npm
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Set up pnpm
+        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build production package
+        run: pnpm build
+
+      - name: Confirm the tagged commit is being packaged
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$BUILD_SHA"
+
+      - name: Stage release files
+        run: pnpm release:pack
+
+      - name: Pack without running lifecycle scripts
+        run: |
+          mkdir -p release-packages
+          npm pack .release/package --pack-destination release-packages --ignore-scripts
+          test "$(find release-packages -maxdepth 1 -name '*.tgz' -type f | wc -l)" -eq 1
+
+      - name: Validate the tarball and its version
+        run: node script/publish-release-package.ts --tag="$GITHUB_REF_NAME" --registry=https://registry.npmjs.org --dry-run
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
+      - name: Upload release package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-packages
+          path: release-packages/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Write release metadata
+        run: |
+          mkdir -p release-metadata
+          printf '%s\n' "$GITHUB_REF_NAME" > release-metadata/tag
+          printf '%s\n' "$GITHUB_SHA" > release-metadata/sha
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-metadata
+          path: release-metadata/
+          if-no-files-found: error
+          retention-days: 7
