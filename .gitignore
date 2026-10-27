@@ -8,3 +8,6 @@ release-metadata/
 *.bundle
 *.patch
 *.tar.gz
+
+.DS_Store
+

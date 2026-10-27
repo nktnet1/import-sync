@@ -39,7 +39,7 @@ function fixture(): {
     const executable = join(bin, "lefthook");
     writeFileSync(
       executable,
-      "#!/usr/bin/env node\n" + `require(${JSON.stringify(runner)});\n`,
+      `#!/usr/bin/env node\nrequire(${JSON.stringify(runner)});\n`,
     );
     chmodSync(executable, 0o755);
   }

@@ -134,11 +134,23 @@ function readMetadata(root: string, name: "tag" | "sha"): string {
 
 /** Ensure the tag still resolves to exactly the commit from the successful CI run. */
 function verifyRemoteTag(root: string, tag: string, sha: string): void {
-  const refs = [`refs/tags/${tag}`, `refs/tags/${tag}^{}`];
-  const result = spawnSync("git", ["ls-remote", "--tags", "origin", ...refs], {
-    cwd: root,
-    encoding: "utf8",
-  });
+  // Validate at the process boundary, even when the caller already checked the
+  // metadata. Only stable or numbered beta versions may become Git ref arguments.
+  const { version } = versionFromTag(tag);
+  if (!/^[a-f0-9]{40}$/.test(sha))
+    throw new Error("Invalid expected build SHA");
+  const ref = `refs/tags/v${version}`;
+  const refs = [ref, `${ref}^{}`];
+  const result = spawnSync(
+    "git",
+    ["ls-remote", "--tags", "--", "origin", ...refs],
+    {
+      cwd: root,
+      encoding: "utf8",
+      shell: false,
+      timeout: 30_000,
+    },
+  );
   if (result.error) throw result.error;
   if (result.status !== 0)
     throw new Error(
@@ -370,9 +382,14 @@ export async function publishReleasePackage({
   const directory = join(canonicalRoot, "release-packages");
   requireDirectory(directory);
   const files = readdirSync(directory);
-  if (files.length !== 1 || !files[0]!.endsWith(".tgz"))
+  const [filename] = files;
+  if (
+    files.length !== 1 ||
+    filename === undefined ||
+    !filename.endsWith(".tgz")
+  )
     throw new Error("Expected exactly one npm release tarball");
-  const file = join(directory, files[0]!);
+  const file = join(directory, filename);
   if (!lstatSync(file).isFile())
     throw new Error("Release tarball must be a regular file");
   const artifact = inspectReleaseTarball(file);

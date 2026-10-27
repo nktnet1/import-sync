@@ -31,13 +31,13 @@ jobs:
     steps:
       # Never execute scripts shipped in the upstream build artifact.
       - name: Checkout trusted publication code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       - name: Download packaged release
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-packages
           path: release-packages
@@ -45,7 +45,7 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: Download release metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-metadata
           path: release-metadata
@@ -53,7 +53,7 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: Set up Node.js (npm Trusted Publishing)
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.x
           registry-url: https://registry.npmjs.org

@@ -113,7 +113,7 @@ export async function runRegistryTest(
         "ACTIONS_ID_TOKEN_REQUEST_URL",
       ].includes(key)
     )
-      delete env[key];
+      Reflect.deleteProperty(env, key);
   }
   Object.assign(env, {
     NODE_ENV: "production",

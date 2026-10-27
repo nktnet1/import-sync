@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -18,7 +19,7 @@ import {
   publishReleasePackage,
 } from "../../script/release-publisher.ts";
 
-const required = ["dist/index.cjs", "dist/index.d.cts"];
+const required = ["dist/index.cjs", "dist/index.d.cts"] as const;
 
 function tempRoot(): string {
   return realpathSync(
@@ -94,6 +95,46 @@ function pack(
   return archive;
 }
 
+function releaseMetadata(root: string, tag: string, sha: string): void {
+  mkdirSync(path.join(root, "release-metadata"), { recursive: true });
+  writeFileSync(path.join(root, "release-metadata/tag"), `${tag}\n`);
+  writeFileSync(path.join(root, "release-metadata/sha"), `${sha}\n`);
+}
+
+function taggedCommit(root: string, tag: string): string {
+  const hooks = path.join(root, "hooks");
+  mkdirSync(hooks);
+  function git(args: string[]): string {
+    const result = spawnSync(
+      "git",
+      [
+        "-c",
+        "user.name=Release test",
+        "-c",
+        "user.email=release-test@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "tag.gpgsign=false",
+        "-c",
+        `core.hooksPath=${hooks}`,
+        ...args,
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    if (result.error) throw result.error;
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  }
+  git(["init", "--quiet"]);
+  git(["commit", "--allow-empty", "--message", "fixture"]);
+  git(["tag", "--annotate", tag, "--message", tag]);
+  // A local origin exercises ls-remote and annotated-tag peeling without
+  // contacting any external server or publishing a package.
+  git(["remote", "add", "origin", "."]);
+  return git(["rev-parse", "HEAD"]);
+}
+
 describe("release artifact packaging", () => {
   it("stages only published files without development hooks", async () => {
     const root = tempRoot();
@@ -104,8 +145,8 @@ describe("release artifact packaging", () => {
         readFileSync(path.join(root, ".release/package/package.json"), "utf8"),
       );
       assert.equal(manifest.version, "2.2.7-beta.2");
-      assert.equal(manifest.scripts, undefined);
-      assert.equal(manifest.devDependencies, undefined);
+      assert.ok(!Object.hasOwn(manifest, "scripts"));
+      assert.ok(!Object.hasOwn(manifest, "devDependencies"));
       const archive = pack(root);
       assert.equal(
         inspectReleaseTarball(archive).manifest.version,
@@ -131,41 +172,58 @@ describe("release artifact packaging", () => {
     }
   });
 
-  it("validates the beta tarball in the directory produced by the release workflow", async () => {
-    const root = tempRoot();
-    try {
-      const release = readFileSync(
-        new URL("../../.github/workflows/release.yaml", import.meta.url),
-        "utf8",
-      );
-      const packedDirectory =
-        /npm pack \.release\/package --pack-destination (\S+)/.exec(release);
-      assert.ok(
-        packedDirectory,
-        "Release workflow must specify its npm pack destination",
-      );
-      const outputDirectory = packedDirectory[1]!;
+  it.each([
+    { label: "LF", newline: "\n" },
+    { label: "CRLF", newline: "\r\n" },
+  ])(
+    "validates the beta tarball in the directory produced by the release workflow ($label)",
+    async ({ newline }) => {
+      const root = tempRoot();
+      try {
+        const release = readFileSync(
+          new URL("../../.github/workflows/release.yaml", import.meta.url),
+          "utf8",
+        ).replace(/\r?\n/g, newline);
+        const outputDirectory =
+          /npm pack \.release\/package --pack-destination (\S+)/.exec(
+            release,
+          )?.[1];
+        assert.ok(
+          outputDirectory,
+          "Release workflow must specify its npm pack destination",
+        );
 
-      createSource(root, "2.3.0-beta.1");
-      prepareReleasePackage({ root, tag: "v2.3.0-beta.1" });
-      pack(root, undefined, outputDirectory);
+        createSource(root, "2.3.0-beta.1");
+        prepareReleasePackage({ root, tag: "v2.3.0-beta.1" });
+        pack(root, undefined, outputDirectory);
 
-      await publishReleasePackage({
-        root,
-        tag: "v2.3.0-beta.1",
-        registry: "https://registry.npmjs.org",
-        dryRun: true,
-      });
-      assert.ok(release.includes(`path: ${outputDirectory}/*.tgz`));
-      const publish = readFileSync(
-        new URL("../../.github/workflows/publish.yaml", import.meta.url),
-        "utf8",
-      );
-      assert.ok(publish.includes(`path: ${outputDirectory}\n`));
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+        await publishReleasePackage({
+          root,
+          tag: "v2.3.0-beta.1",
+          registry: "https://registry.npmjs.org",
+          dryRun: true,
+        });
+        assert.ok(
+          release
+            .split(/\r?\n/)
+            .some((line) => line.trim() === `path: ${outputDirectory}/*.tgz`),
+          "Release upload path must match the pack destination",
+        );
+        const publish = readFileSync(
+          new URL("../../.github/workflows/publish.yaml", import.meta.url),
+          "utf8",
+        ).replace(/\r?\n/g, newline);
+        assert.ok(
+          publish
+            .split(/\r?\n/)
+            .some((line) => line.trim() === `path: ${outputDirectory}`),
+          "Publish download path must match the pack destination",
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("accepts stable tags for the latest distribution channel", async () => {
     const root = tempRoot();
@@ -193,7 +251,7 @@ describe("release artifact packaging", () => {
         () => prepareReleasePackage({ root, tag: "v2.2.7" }),
         /Expected/,
       );
-      rmSync(path.join(root, required[required.length - 1]!), { force: true });
+      rmSync(path.join(root, required[1]), { force: true });
       assert.throws(
         () => prepareReleasePackage({ root, tag: "v2.2.7-beta.2" }),
         /Missing/,
@@ -229,6 +287,82 @@ describe("release artifact packaging", () => {
     }
   });
 
+  it("verifies the annotated origin tag against the successful build commit", async () => {
+    const root = tempRoot();
+    try {
+      const tag = "v2.2.7-beta.2";
+      createSource(root);
+      prepareReleasePackage({ root, tag });
+      pack(root);
+      const sha = taggedCommit(root, tag);
+      releaseMetadata(root, tag, sha);
+      await publishReleasePackage({
+        root,
+        expectedSha: sha,
+        registry: "https://registry.npmjs.org",
+        dryRun: true,
+      });
+
+      const otherSha = "f".repeat(40);
+      releaseMetadata(root, tag, otherSha);
+      await assert.rejects(
+        publishReleasePackage({
+          root,
+          expectedSha: otherSha,
+          registry: "https://registry.npmjs.org",
+          dryRun: true,
+        }),
+        /does not point to the release commit/,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    "--upload-pack=unexpected",
+    "v2.2.7-beta.2 --upload-pack=unexpected",
+    "v2.2.7-beta.2\n--upload-pack=unexpected",
+    "v2.2.7-beta.2;echo unexpected",
+  ])(
+    "rejects unsafe release tag metadata %j before invoking Git",
+    async (tag) => {
+      const root = tempRoot();
+      try {
+        const sha = "a".repeat(40);
+        releaseMetadata(root, tag, sha);
+        await assert.rejects(
+          publishReleasePackage({
+            root,
+            expectedSha: sha,
+            registry: "https://registry.npmjs.org",
+            dryRun: true,
+          }),
+          /Release tag must start with v|Unsupported release version/,
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rejects option-like build SHAs before reading metadata or invoking Git", async () => {
+    const root = tempRoot();
+    try {
+      await assert.rejects(
+        publishReleasePackage({
+          root,
+          expectedSha: "--upload-pack=unexpected",
+          registry: "https://registry.npmjs.org",
+          dryRun: true,
+        }),
+        /Invalid expected build SHA/,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects archives missing a required public entry", () => {
     const root = tempRoot();
     try {
@@ -250,9 +384,9 @@ describe("release artifact packaging", () => {
     const root = tempRoot();
     try {
       createSource(root);
-      const binary = path.join(root, required[required.length - 1]!);
-      rmSync(binary);
-      symlinkSync(path.join(root, "README.md"), binary);
+      const declarations = path.join(root, required[1]);
+      rmSync(declarations);
+      symlinkSync(path.join(root, "README.md"), declarations);
       assert.throws(
         () => prepareReleasePackage({ root, tag: "v2.2.7-beta.2" }),
         /regular file/,
@@ -269,7 +403,8 @@ describe("release artifact packaging", () => {
       prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
       const archive = pack(root);
       const bytes = readFileSync(archive);
-      bytes[bytes.length - 10] = bytes[bytes.length - 10]! ^ 0xff;
+      const offset = bytes.length - 10;
+      bytes.writeUInt8(bytes.readUInt8(offset) ^ 0xff, offset);
       writeFileSync(archive, bytes);
       assert.throws(() => inspectReleaseTarball(archive));
     } finally {

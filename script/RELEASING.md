@@ -53,10 +53,15 @@ that exact commit, and push it. The tag must match the manifest exactly.
 
 ## CI and publication
 
-**Release** invokes the reusable **Pipeline**. The build and tests run across
-Linux, macOS, and Windows with Node 22, 24, and 26. Biome, type checks, coverage,
-and Verdaccio verification run once on Ubuntu/Node 24. All jobs must pass
-before release packaging starts.
+**Release** invokes the reusable **Pipeline**. The build and library tests run
+across Linux, macOS, and Windows with Node 22, 24, and 26. The matrix excludes
+`tests/tooling/**`; release tooling tests, Biome, type checks, coverage, and
+Verdaccio verification run once on Ubuntu/Node 24. All jobs must pass before
+release packaging starts.
+
+External GitHub Actions are pinned to full commit SHAs, with release versions
+in comments. Update the SHA and its version comment together after reviewing
+the upstream release. The publishing job continues to use `Production`.
 
 Packaging builds `dist`, stages the runtime and declarations alongside the
 README and licence, and removes development dependencies and lifecycle hooks.

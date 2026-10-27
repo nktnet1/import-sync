@@ -29,9 +29,12 @@ export function versionFromTag(tag: string): ReleaseVersion {
 export function compareReleaseBases(left: string, right: string): number {
   const leftParts = parseReleaseVersion(left).base.split(".").map(BigInt);
   const rightParts = parseReleaseVersion(right).base.split(".").map(BigInt);
-  for (let i = 0; i < 3; i++) {
-    if (leftParts[i]! > rightParts[i]!) return 1;
-    if (leftParts[i]! < rightParts[i]!) return -1;
+  for (const [index, leftPart] of leftParts.entries()) {
+    const rightPart = rightParts[index];
+    if (rightPart === undefined)
+      throw new Error("Invalid release base components");
+    if (leftPart > rightPart) return 1;
+    if (leftPart < rightPart) return -1;
   }
   return 0;
 }
