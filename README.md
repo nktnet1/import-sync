@@ -54,17 +54,17 @@ Capable of importing ESM-only libraries such as [node-fetch@3](https://github.co
 
 - [1. Installation](#1-installation)
 - [2. Usage](#2-usage)
-    - [2.1. id](#21-id)
+  - [2.1. id](#21-id)
     - [2.2. options](#22-options)
     - [2.3. return](#23-return)
 - [3. License](#3-license)
 - [4. Limitations](#4-limitations)
 - [5. Caveats](#5-caveats)
-    - [5.1. Idea](#51-idea)
+  - [5.1. Idea](#51-idea)
     - [5.2. Discovery](#52-approach)
     - [5.3. Result](#53-result)
 - [6. Major Changes](#6-major-changes)
-    - [6.1. 2023-12-16](#61-2023-12-16)
+  - [6.1. 2023-12-16](#61-2023-12-16)
 
 ## 1. Installation
 
@@ -88,39 +88,35 @@ importSync(id, options);
 Importing from the same directory
 
 ```javascript
-const { someVariable, someFunction } = importSync('./some-module');
+const { someVariable, someFunction } = importSync("./some-module");
 ```
 
 Importing `.mjs` file from a different directory
 
 ```javascript
-const { someFunction  } = importSync('../src/someModule.mjs');
+const { someFunction } = importSync("../src/someModule.mjs");
 ```
 
 Using a different basePath
 
 ```javascript
-const { someFunction } = importSync(
-  './someModule',
-  { basePath: process.cwd() }
-);
+const { someFunction } = importSync("./someModule", {
+  basePath: process.cwd(),
+});
 ```
 
 Using additional esm options as described in esm's [documentation](https://github.com/standard-things/esm#options)
 
 ```javascript
-const { someFunction } = importSync(
-  './someModule',
-  {
-    esmOptions: {
-      cjs: {
-        cache: true
-      },
-      mode: 'all',
-      force: true,
-    }
-  }
-);
+const { someFunction } = importSync("./someModule", {
+  esmOptions: {
+    cjs: {
+      cache: true,
+    },
+    mode: "all",
+    force: true,
+  },
+});
 ```
 
 Importing an ESM-only module
@@ -139,9 +135,9 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
 - `'../animals/cats.js'`
 - `'./dogs.mjs'`
 - `'./minimal'`
-    -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs, .ts]`
+  -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs, .ts]`
 - `'node-fetch'`
-    - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) into your cjs project
+  - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) into your cjs project
 
 ### 2.2. options
 
@@ -260,28 +256,28 @@ final submission is made, and is located in the centralised [COMP1531 course acc
 Initially, the [esm](https://github.com/standard-things/esm) library looked promising. However, when the global dryrun script was executed in a mock student's project directory, the following error occurred:
 
 > Error [ERR_REQUIRE_ESM]: require() of ES Module /import/ravel/5/z5313515/project-backend/src/auth.js not supported.<br/>
-Instead change the require of auth.js in null to a dynamic import() which is available in all CommonJS modules
+> Instead change the require of auth.js in null to a dynamic import() which is available in all CommonJS modules
 
 This is due to the `package.json` containing `"type": "module"`, as iteration 1 of the student major project uses ESM for the seamless transition to future iterations.
 
 The following approaches were thus attempted, but were unsatisfactory for our purpose:
 
 1. [jewire](https://github.com/nktnet1/jewire)/[rewire](https://github.com/jhnns/rewire)/[require](https://nodejs.org/api/modules.html#requireid)
-    - in iteration 1, the dryrun requires the import of ES6 modules, so [jewire](https://github.com/nktnet1/jewire) (which was used for the dryrun of iteration 0) was no longer satisfying our requirements
-    - the same limitations of being CommonJS exclusive applies to [rewire](https://github.com/jhnns/rewire) and [require](https://nodejs.org/api/modules.html#requireid)
+   - in iteration 1, the dryrun requires the import of ES6 modules, so [jewire](https://github.com/nktnet1/jewire) (which was used for the dryrun of iteration 0) was no longer satisfying our requirements
+     - the same limitations of being CommonJS exclusive applies to [rewire](https://github.com/jhnns/rewire) and [require](https://nodejs.org/api/modules.html#requireid)
 2. [import()](https://nodejs.org/api/esm.html#import-expressions) - ECMAScript dynamic import
-    - this was the previous attempt at writing the dryrun
-    - However, it relied on asynchronous code. Since COMP1531 is **fully synchronous** (including the use of [sync-request-curl](https://github.com/nktnet1/sync-request-curl) for sending HTTP requests), this became a source of mystery and confusion for students
-    - additionally, students had to append the suffix `.js` to all of their file imports in the project solely to use the dryrun. This resulted in ambiguous error messages and obscure dryrun requirements unrelated to the project
+   - this was the previous attempt at writing the dryrun
+     - However, it relied on asynchronous code. Since COMP1531 is **fully synchronous** (including the use of [sync-request-curl](https://github.com/nktnet1/sync-request-curl) for sending HTTP requests), this became a source of mystery and confusion for students
+       - additionally, students had to append the suffix `.js` to all of their file imports in the project solely to use the dryrun. This resulted in ambiguous error messages and obscure dryrun requirements unrelated to the project
 3. [require-esm-in-cjs](https://github.com/SamGoody/require-esm-in-cjs)
-    - this library utilises [deasync](https://github.com/abbr/deasync), which when used in NodeJS for Jest tests, could hang indefinitely as seen in Jest's issue [#9729](https://github.com/jestjs/jest/issues/9729)
-    - since COMP1531 uses Jest as the sole testing framework, [deasync](https://github.com/abbr/deasync) was ruled out
+   - this library utilises [deasync](https://github.com/abbr/deasync), which when used in NodeJS for Jest tests, could hang indefinitely as seen in Jest's issue [#9729](https://github.com/jestjs/jest/issues/9729)
+     - since COMP1531 uses Jest as the sole testing framework, [deasync](https://github.com/abbr/deasync) was ruled out
 4. Other async-to-sync conversions for dynamic [import()](https://nodejs.org/api/esm.html#import-expressions)
-    - [synckit](https://github.com/un-ts/synckit): worker_threads, Jest and external imports did not work (unclear reason)
-    - [sync-rpc](https://github.com/ForbesLindesay/sync-rpc): leaves orphan processes when used in Jest as explained in issue [#10](https://github.com/ForbesLindesay/sync-rpc/issues/10)
-    - [fibers](https://github.com/laverdet/node-fibers): obsolete and does not work for node versions later than 16
-    - [synchronize](https://github.com/al6x/synchronize): documentation link gives 404 and has fiber as a dependency
-    - [sync/node-sync](https://github.com/ybogdanov/node-sync): uses fiber (note: "redblaze/node-sync" on github, "sync" on npm)
+   - [synckit](https://github.com/un-ts/synckit): worker_threads, Jest and external imports did not work (unclear reason)
+     - [sync-rpc](https://github.com/ForbesLindesay/sync-rpc): leaves orphan processes when used in Jest as explained in issue [#10](https://github.com/ForbesLindesay/sync-rpc/issues/10)
+       - [fibers](https://github.com/laverdet/node-fibers): obsolete and does not work for node versions later than 16
+         - [synchronize](https://github.com/al6x/synchronize): documentation link gives 404 and has fiber as a dependency
+           - [sync/node-sync](https://github.com/ybogdanov/node-sync): uses fiber (note: "redblaze/node-sync" on github, "sync" on npm)
 
 ### 5.3. Result
 
@@ -301,11 +297,11 @@ Another issue that **import-sync** (v2) addresses is [esm's open issue #904](htt
 
 when importing ESM-only libraries such as [node-fetch@3](https://github.com/node-fetch/node-fetch/blob/8b3320d2a7c07bce4afc6b2bf6c3bbddda85b01f/README.md#commonjs) in a CommonJS module. This is done by overriding the default `Module._resolveFilename` function to remove the `node:` prefix, effectively changing any imports of the form (for example):
 ```javascript
-import http from 'node:http';
+import http from "node:http";
 ```
 to
 ```javascript
-import http from 'http';
+import http from "http";
 ```
 for all imported modules.
 
