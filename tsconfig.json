@@ -1,18 +1,20 @@
 {
+  "extends": "./config/tsconfig.source.json",
   "compilerOptions": {
-    "allowJs": true,
-    "allowSyntheticDefaultImports": true,
-    "declaration": true,
-    "esModuleInterop": true,
-    "lib": ["es5", "es2015", "esnext", "dom"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "noImplicitAny": true,
-    "noUnusedLocals": true,
-    "skipLibCheck": true,
-    "sourceMap": true,
-    "strict": true,
-    "target": "ES6"
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "lib": ["ES2023", "DOM"],
+    "noEmit": true,
+    "target": "ES2023",
+    "types": ["node"]
   },
-  "include": ["src/**/*.ts", "types/**/*.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "types/**/*.d.ts",
+    "script/**/*.ts",
+    "tests/**/*.ts",
+    "commitlint.config.ts",
+    "tsdown.config.ts",
+    "vitest.config.ts"
+  ]
 }

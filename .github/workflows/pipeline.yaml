@@ -69,7 +69,7 @@ jobs:
         run: pnpm check
 
       - name: Type-check implementation and release tooling
-        run: pnpm tsc
+        run: pnpm typecheck
 
       - name: Run tests with coverage
         run: pnpm tc

@@ -19,7 +19,7 @@
     "lint": "biome lint",
     "format": "biome format",
     "check": "biome check",
-    "tsc": "tsc --noEmit && tsc --project tsconfig.tooling.json",
+    "typecheck": "tsc --noEmit && tsc --project config/tsconfig.tooling.json",
     "build": "tsdown",
     "prepublishOnly": "npm run build",
     "prepare": "node script/install-hooks.ts"

@@ -16,12 +16,14 @@ export interface PrepareReleaseOptions {
   root: string;
   tag: string;
   expectedSha?: string;
+  quiet?: boolean;
 }
 
 export function prepareReleasePackage({
   root,
   tag,
   expectedSha,
+  quiet = false,
 }: PrepareReleaseOptions): void {
   const canonicalRoot = realpathSync(root);
   const manifest: Record<string, unknown> = JSON.parse(
@@ -101,9 +103,11 @@ export function prepareReleasePackage({
     join(directory, "package.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
-  console.log(
-    `Prepared ${styleText("green", `import-sync@${version}`)} in .release/package`,
-  );
+  if (!quiet) {
+    console.log(
+      `Prepared ${styleText("green", `import-sync@${version}`)} in .release/package`,
+    );
+  }
 }
 
 if (import.meta.main) {

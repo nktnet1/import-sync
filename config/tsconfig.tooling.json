@@ -1,5 +1,5 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.source.json",
   "compilerOptions": {
     "allowJs": false,
     "allowImportingTsExtensions": true,
@@ -12,5 +12,5 @@
     "types": ["node"],
     "verbatimModuleSyntax": true
   },
-  "include": ["script/**/*.ts", "tests/tooling/**/*.ts"]
+  "include": ["../script/**/*.ts", "../tests/tooling/**/*.ts"]
 }

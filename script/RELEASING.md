@@ -32,6 +32,12 @@ an unreleased beta series already recorded in `package.json`.
 TypeScript checks, the build and Vitest suite, and Verdaccio consumer tests.
 It leaves the result uncommitted for review.
 
+`pnpm typecheck` checks the complete editor project and the stricter NodeNext
+release tooling project. The root `tsconfig.json` includes the source, scripts,
+tests, and main TypeScript configuration files with Node types, so VS Code uses
+a configured project for them. Secondary TypeScript configs live under `config/`.
+The build uses `config/tsconfig.source.json` to retain its original source settings.
+
 `pnpm release:beta --base 2.2.7 --publish` requires a clean `main` checkout,
 runs the same checks, commits `chore(release): <version>`, creates an annotated
 `v<version>` tag, and atomically pushes the branch and tag to `origin`.
@@ -76,11 +82,15 @@ an already-published version.
 ephemeral loopback port with temporary storage, npm configuration, cache, and
 publisher credentials. It builds and packs through the release staging code,
 publishes to the local registry, and installs that exact version in independent
-CommonJS and ESM projects. Each consumer imports CJS and ESM modules, exercises
-extension lookup and `basePath`, and checks missing-file errors. Dependency
+CommonJS and ESM projects. All four project/module combinations run in separate
+Node processes and have individual results. Each project also exercises extension
+lookup, `basePath`, and missing-file errors in a separate compatibility check. Dependency
 installs use the registry's npm uplink and retain runtime installation scripts.
 The registry and temporary projects are removed on success or failure.
 Use `--format=cjs`, `--format=esm`, or `--verbose` to narrow or inspect a run.
+The default output has numbered stages, timings, PASS/FAIL results, and a final
+summary of every selected import pair. Failed and unrun checks are distinct.
+`--verbose` adds subprocess output between stage headers and their results.
 
 Lefthook replaces Husky. The root `prepare` script installs hooks after removing
 only a local `core.hooksPath` left by Husky (`.husky` or `.husky/_`). Custom or

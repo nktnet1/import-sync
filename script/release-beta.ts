@@ -90,7 +90,7 @@ If a check fails, inspect the uncommitted package.json change before retrying.`)
 
   manifest.version = version;
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  for (const name of ["check", "tsc", "test", "test:verdaccio"]) {
+  for (const name of ["check", "typecheck", "test", "test:verdaccio"]) {
     console.log(`Checking ${styleText("cyan", name)}...`);
     runPnpm([name], { cwd: root, inherit: true });
   }

@@ -4,9 +4,15 @@ import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { parseArgs, styleText } from "node:util";
+import { parseArgs } from "node:util";
 import { runCommand, runNpm } from "./command.ts";
 import { prepareReleasePackage } from "./prepare-release-package.ts";
+import {
+  consumerFormats,
+  createRegistryReporter,
+  formatName,
+  moduleFormats,
+} from "./registry-reporter.ts";
 import { parseReleaseVersion } from "./release-policy.ts";
 import { inspectReleaseTarball } from "./release-publisher.ts";
 
@@ -77,16 +83,13 @@ export async function runRegistryTest(
       verbose: { type: "boolean", default: false },
     },
   });
-  if (!["both", "cjs", "esm"].includes(values.format))
-    throw new Error("--format must be both, cjs or esm");
-  const formats = values.format === "both" ? ["cjs", "esm"] : [values.format];
-  // Verdaccio is a pinned development dependency: running this test never
-  // downloads tooling or falls back to an unpinned npx installation.
-  const verdaccioModule = createRequire(import.meta.url).resolve("verdaccio");
+  const formats = consumerFormats(values.format);
   const manifest: { name: string; version: string } = JSON.parse(
     await fs.readFile(path.join(root, "package.json"), "utf8"),
   );
   const { distTag } = parseReleaseVersion(manifest.version);
+  const report = createRegistryReporter(formats, values.verbose);
+  report.header(manifest.name, manifest.version);
   const temporary = await fs.realpath(
     await fs.mkdtemp(path.join(tmpdir(), "import-sync-registry-")),
   );
@@ -131,64 +134,82 @@ export async function runRegistryTest(
   const command = { env, cwd: temporary, inherit: values.verbose };
   let child: ChildProcess | undefined;
   let registryLog = "";
-  let activeStage = "initialisation";
-
-  function stage<T>(name: string, action: () => T): T {
-    activeStage = name;
-    console.log(`Checking ${styleText("cyan", name)}...`);
-    return action();
-  }
+  let failure: Error | undefined;
 
   try {
+    report.section("PACKAGE & REGISTRY", "Prepare, pack, and publish");
+    // Resolve installed tooling before starting work; never download an
+    // unpinned registry or fall back to an npx installation.
+    const verdaccioModule = await report.stage(
+      "TOOLS",
+      "Locate installed Verdaccio",
+      () => createRequire(import.meta.url).resolve("verdaccio"),
+    );
     await fs.mkdir(registryRoot);
     await fs.writeFile(npmrc, "");
     await fs.writeFile(globalNpmrc, "");
-    stage("build", () => runNpm(["run", "build"], { ...command, cwd: root }));
-    stage("package", () => {
-      prepareReleasePackage({ root, tag: `v${manifest.version}` });
-      runNpm(
-        [
-          "pack",
-          ".release/package",
-          "--pack-destination",
-          temporary,
-          "--ignore-scripts",
-        ],
-        { ...command, cwd: root },
-      );
-    });
-    const tarballs = (await fs.readdir(temporary)).filter((file) =>
-      file.endsWith(".tgz"),
+    await report.stage(
+      "BUILD",
+      `Compile ${manifest.name}@${manifest.version}`,
+      () => runNpm(["run", "build"], { ...command, cwd: root }),
     );
-    if (tarballs.length !== 1)
-      throw new Error("Expected exactly one packed release");
-    const tarball = path.join(temporary, tarballs[0]);
-    inspectReleaseTarball(tarball);
+    const tarball = await report.stage(
+      "PACK",
+      "Stage and validate the release tarball",
+      async () => {
+        prepareReleasePackage({
+          root,
+          tag: `v${manifest.version}`,
+          quiet: !values.verbose,
+        });
+        runNpm(
+          [
+            "pack",
+            ".release/package",
+            "--pack-destination",
+            temporary,
+            "--ignore-scripts",
+          ],
+          { ...command, cwd: root },
+        );
+        const tarballs = (await fs.readdir(temporary)).filter((file) =>
+          file.endsWith(".tgz"),
+        );
+        if (tarballs.length !== 1)
+          throw new Error("Expected exactly one packed release");
+        const file = path.join(temporary, tarballs[0]);
+        inspectReleaseTarball(file);
+        return file;
+      },
+    );
 
-    activeStage = "registry startup";
-    const configPath = path.join(registryRoot, "config.json");
-    await fs.writeFile(
-      configPath,
-      JSON.stringify({
-        storage: path.join(registryRoot, "storage"),
-        auth: {
-          htpasswd: {
-            file: path.join(registryRoot, "htpasswd"),
-            max_users: 10,
-          },
-        },
-        uplinks: { npmjs: { url: "https://registry.npmjs.org/" } },
-        packages: {
-          [manifest.name]: { access: "$all", publish: "$authenticated" },
-          "**": { access: "$all", proxy: "npmjs" },
-        },
-        log: { type: "stdout", format: "pretty", level: "warn" },
-      }),
-    );
-    const serverPath = path.join(registryRoot, "server.cjs");
-    await fs.writeFile(
-      serverPath,
-      `const { runServer } = require(process.argv[2]);
+    const registry = await report.stage(
+      "REGISTRY",
+      "Start temporary local registry",
+      async () => {
+        const configPath = path.join(registryRoot, "config.json");
+        await fs.writeFile(
+          configPath,
+          JSON.stringify({
+            storage: path.join(registryRoot, "storage"),
+            auth: {
+              htpasswd: {
+                file: path.join(registryRoot, "htpasswd"),
+                max_users: 10,
+              },
+            },
+            uplinks: { npmjs: { url: "https://registry.npmjs.org/" } },
+            packages: {
+              [manifest.name]: { access: "$all", publish: "$authenticated" },
+              "**": { access: "$all", proxy: "npmjs" },
+            },
+            log: { type: "stdout", format: "pretty", level: "warn" },
+          }),
+        );
+        const serverPath = path.join(registryRoot, "server.cjs");
+        await fs.writeFile(
+          serverPath,
+          `const { runServer } = require(process.argv[2]);
 runServer(process.argv[3]).then((app) => {
   const server = app.listen(0, '127.0.0.1', () => {
     process.send({ port: server.address().port });
@@ -198,155 +219,238 @@ runServer(process.argv[3]).then((app) => {
   process.once('disconnect', shutdown);
 }).catch((error) => { console.error(error); process.exit(1); });
 `,
-    );
-    child = fork(serverPath, [verdaccioModule, configPath], {
-      cwd: registryRoot,
-      env,
-      execPath: process.execPath,
-      execArgv: [],
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-    });
-    for (const stream of [child.stdout, child.stderr]) {
-      stream?.setEncoding("utf8").on("data", (chunk: string) => {
-        registryLog = (registryLog + chunk).slice(-16_000);
-        if (values.verbose) process.stderr.write(chunk);
-      });
-    }
-    const registry = await registryReady(child);
-    console.log(`Started ${styleText("cyan", "Verdaccio")} at ${registry}`);
-
-    activeStage = "authentication";
-    const username = "import-sync-smoke";
-    const login = await fetch(
-      `${registry}/-/user/org.couchdb.user:${username}`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: username,
-          password: randomBytes(24).toString("base64url"),
-          email: "smoke@example.invalid",
-          type: "user",
-          roles: [],
-        }),
-        signal: AbortSignal.timeout(10_000),
+        );
+        child = fork(serverPath, [verdaccioModule, configPath], {
+          cwd: registryRoot,
+          env,
+          execPath: process.execPath,
+          execArgv: [],
+          stdio: ["ignore", "pipe", "pipe", "ipc"],
+        });
+        for (const stream of [child.stdout, child.stderr]) {
+          stream?.setEncoding("utf8").on("data", (chunk: string) => {
+            registryLog = (registryLog + chunk).slice(-16_000);
+            if (values.verbose) process.stderr.write(chunk);
+          });
+        }
+        return registryReady(child);
       },
     );
-    const credentials: unknown = await login.json();
-    if (
-      !login.ok ||
-      typeof credentials !== "object" ||
-      credentials === null ||
-      !("token" in credentials) ||
-      typeof credentials.token !== "string"
-    )
-      throw new Error(
-        `Unable to authenticate temporary Verdaccio user (${login.status})`,
-      );
-    await fs.writeFile(
-      npmrc,
-      `registry=${registry}/\n//${new URL(registry).host}/:_authToken=${credentials.token}\n`,
-    );
-    env.NPM_CONFIG_REGISTRY = registry;
-    stage("publish", () =>
-      runNpm(
-        [
-          "publish",
-          tarball,
-          "--ignore-scripts",
-          "--registry",
-          registry,
-          "--tag",
-          distTag,
-        ],
-        command,
-      ),
-    );
 
-    activeStage = "published metadata";
-    const response = await fetch(
-      `${registry}/${encodeURIComponent(manifest.name)}`,
-      {
-        signal: AbortSignal.timeout(10_000),
+    await report.stage(
+      "AUTH",
+      "Create temporary publisher credentials",
+      async () => {
+        const username = "import-sync-smoke";
+        const login = await fetch(
+          `${registry}/-/user/org.couchdb.user:${username}`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              name: username,
+              password: randomBytes(24).toString("base64url"),
+              email: "smoke@example.invalid",
+              type: "user",
+              roles: [],
+            }),
+            signal: AbortSignal.timeout(10_000),
+          },
+        );
+        const credentials: unknown = await login.json();
+        if (
+          !login.ok ||
+          typeof credentials !== "object" ||
+          credentials === null ||
+          !("token" in credentials) ||
+          typeof credentials.token !== "string"
+        )
+          throw new Error(
+            `Unable to authenticate temporary Verdaccio user (${login.status})`,
+          );
+        await fs.writeFile(
+          npmrc,
+          `registry=${registry}/\n//${new URL(registry).host}/:_authToken=${credentials.token}\n`,
+        );
+        env.NPM_CONFIG_REGISTRY = registry;
       },
     );
-    const metadata = (await response.json()) as {
-      "dist-tags"?: Record<string, string>;
-    };
-    if (!response.ok || metadata["dist-tags"]?.[distTag] !== manifest.version)
-      throw new Error(
-        `Published ${distTag} tag does not match ${manifest.version}`,
-      );
-
-    for (const format of formats) {
-      const consumer = path.join(temporary, `consumer-${format}`);
-      await fs.cp(path.join(root, "tests/packed"), consumer, {
-        recursive: true,
-      });
-      await fs.writeFile(
-        path.join(consumer, "package.json"),
-        JSON.stringify({
-          name: `import-sync-consumer-${format}`,
-          private: true,
-          type: format === "cjs" ? "commonjs" : "module",
-        }),
-      );
-      stage(`${format.toUpperCase()} install`, () =>
+    await report.stage(
+      "PUBLISH",
+      `Publish ${manifest.name}@${manifest.version} to Verdaccio`,
+      () =>
         runNpm(
           [
-            "install",
-            `${manifest.name}@${manifest.version}`,
+            "publish",
+            tarball,
+            "--ignore-scripts",
             "--registry",
             registry,
-            "--ignore-scripts=false",
-            "--foreground-scripts",
-            "--package-lock=false",
-            "--no-audit",
-            "--no-fund",
+            "--tag",
+            distTag,
           ],
-          { ...command, cwd: consumer },
+          command,
         ),
+    );
+    await report.stage(
+      "VERIFY",
+      `Check published version and ${distTag} dist-tag`,
+      async () => {
+        const response = await fetch(
+          `${registry}/${encodeURIComponent(manifest.name)}`,
+          {
+            signal: AbortSignal.timeout(10_000),
+          },
+        );
+        const metadata = (await response.json()) as {
+          "dist-tags"?: Record<string, string>;
+        };
+        if (
+          !response.ok ||
+          metadata["dist-tags"]?.[distTag] !== manifest.version
+        )
+          throw new Error(
+            `Published ${distTag} tag does not match ${manifest.version}`,
+          );
+      },
+    );
+
+    for (const project of formats) {
+      const consumer = path.join(temporary, `consumer-${project}`);
+      const label = project.toUpperCase();
+      report.section(
+        `${formatName(project)} PROJECT`,
+        `type: "${project === "cjs" ? "commonjs" : "module"}"`,
       );
-      const installed: { name: string; version: string; scripts?: unknown } =
-        JSON.parse(
-          await fs.readFile(
-            path.join(consumer, "node_modules/import-sync/package.json"),
-            "utf8",
+      await report.stage(
+        label,
+        "Create isolated consumer project",
+        async () => {
+          await fs.cp(path.join(root, "tests/packed"), consumer, {
+            recursive: true,
+          });
+          await fs.writeFile(
+            path.join(consumer, "package.json"),
+            JSON.stringify({
+              name: `import-sync-consumer-${project}`,
+              private: true,
+              type: project === "cjs" ? "commonjs" : "module",
+            }),
+          );
+          // .js inherits the project's type; the two import pairs are run in
+          // separate Node processes and receive separate PASS/FAIL results.
+          await fs.copyFile(
+            path.join(consumer, `check.${project === "cjs" ? "cjs" : "mjs"}`),
+            path.join(consumer, "check.js"),
+          );
+        },
+      );
+      await report.stage(
+        label,
+        "Install the published package and its runtime dependencies",
+        () =>
+          runNpm(
+            [
+              "install",
+              `${manifest.name}@${manifest.version}`,
+              "--registry",
+              registry,
+              "--ignore-scripts=false",
+              "--foreground-scripts",
+              "--package-lock=false",
+              "--no-audit",
+              "--no-fund",
+            ],
+            { ...command, cwd: consumer },
+          ),
+      );
+      await report.stage(
+        "VERIFY",
+        "Check installed release files",
+        async () => {
+          const installed: {
+            name: string;
+            version: string;
+            scripts?: unknown;
+          } = JSON.parse(
+            await fs.readFile(
+              path.join(consumer, "node_modules/import-sync/package.json"),
+              "utf8",
+            ),
+          );
+          if (
+            installed.name !== manifest.name ||
+            installed.version !== manifest.version ||
+            installed.scripts
+          )
+            throw new Error(
+              "Installed package does not match the staged release",
+            );
+          for (const file of ["dist/index.cjs", "dist/index.d.cts"]) {
+            const stats = await fs.stat(
+              path.join(consumer, "node_modules/import-sync", file),
+            );
+            if (!stats.isFile() || stats.size === 0)
+              throw new Error(`Missing or empty installed file: ${file}`);
+          }
+        },
+      );
+      for (const target of moduleFormats) {
+        await report.check(project, target, () =>
+          report.stage(
+            "TEST",
+            `${formatName(project)} project importing ${formatName(target)} module`,
+            () =>
+              runCommand(process.execPath, ["check.js", target], {
+                ...command,
+                cwd: consumer,
+              }),
           ),
         );
-      if (
-        installed.name !== manifest.name ||
-        installed.version !== manifest.version ||
-        installed.scripts
-      )
-        throw new Error("Installed package does not match the staged release");
-      // .js inherits the consumer's type, exercising both actual project modes.
-      await fs.copyFile(
-        path.join(consumer, `check.${format === "cjs" ? "cjs" : "mjs"}`),
-        path.join(consumer, "check.js"),
-      );
-      stage(`${format.toUpperCase()} imports`, () =>
-        runCommand(process.execPath, ["check.js"], {
-          ...command,
-          cwd: consumer,
-        }),
+      }
+      await report.check(project, "compatibility", () =>
+        report.stage(
+          "CHECK",
+          "Extension lookup, basePath, and missing-file errors",
+          () =>
+            runCommand(process.execPath, ["check.js", "compatibility"], {
+              ...command,
+              cwd: consumer,
+            }),
+        ),
       );
     }
-    console.log(
-      `${styleText("green", "PASS")} published package verified in ${formats.length} isolated consumers`,
-    );
   } catch (error) {
-    console.error(`${styleText("red", "FAIL")} during ${activeStage}`);
+    failure = error instanceof Error ? error : new Error(String(error));
     if (registryLog)
       console.error(`Registry log (last 16 KB):\n${registryLog}`);
-    throw error;
   } finally {
+    report.section("CLEANUP", "Stop registry and remove temporary projects");
     try {
-      await stopRegistry(child);
-    } finally {
-      await fs.rm(temporary, { recursive: true, force: true });
+      await report.stage(
+        "CLEANUP",
+        "Stop Verdaccio and remove temporary workspace",
+        async () => {
+          try {
+            await stopRegistry(child);
+          } finally {
+            await fs.rm(temporary, { recursive: true, force: true });
+          }
+        },
+      );
+    } catch (error) {
+      const cleanupFailure =
+        error instanceof Error ? error : new Error(String(error));
+      failure = failure
+        ? new AggregateError(
+            [failure, cleanupFailure],
+            "Registry test and cleanup failed",
+          )
+        : cleanupFailure;
     }
+    report.summary(failure === undefined);
   }
+  if (failure) throw failure;
 }
 
 if (import.meta.main) {
