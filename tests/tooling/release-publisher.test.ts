@@ -141,28 +141,33 @@ describe("publication recovery", () => {
       assert.equal(publishCount(), 0);
     }));
 
-  it("retries a transient preflight lookup before publishing", () =>
-    withRelease(async (root) => {
-      replies({ command: "view", status: 1, stderr: "EAI_AGAIN" }, missing, {
-        command: "publish",
-        status: 0,
-      });
-      await publish(root);
-      assert.equal(publishCount(), 1);
-      assert.equal(commands.delay.mock.calls.length, 1);
-    }));
-
-  it("recovers a lost response after the registry exposes the exact tarball", () =>
+  it.each([
+    {
+      description: "retries a transient preflight lookup before publishing",
+      history: (): Reply[] => [
+        { command: "view", status: 1, stderr: "EAI_AGAIN" },
+        missing,
+        { command: "publish", status: 0 },
+      ],
+    },
+    {
+      description:
+        "recovers a lost response after the registry exposes the exact tarball",
+      history: (integrity: string): Reply[] => [
+        missing,
+        disconnected,
+        missing,
+        { command: "view", status: 0, value: integrity },
+      ],
+    },
+  ])("$description", ({ history }) =>
     withRelease(async (root, integrity) => {
-      replies(missing, disconnected, missing, {
-        command: "view",
-        status: 0,
-        value: integrity,
-      });
+      replies(...history(integrity));
       await publish(root);
       assert.equal(publishCount(), 1);
       assert.equal(commands.delay.mock.calls.length, 1);
-    }));
+    }),
+  );
 
   it("limits transient publishing failures to three attempts", () =>
     withRelease(async (root) => {

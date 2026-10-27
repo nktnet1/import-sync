@@ -1,27 +1,12 @@
+/* biome-ignore-all assist/source/organizeImports: load the typed fixture before esm-sync replaces the CommonJS loader */
+import checkConsumer from "./helpers/check-consumer.cts";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import importSync from "import-sync";
 
 assert.equal(typeof importSync, "function");
-const target = process.argv[2] ?? "both";
-assert.ok(
-  ["both", "cjs", "esm", "compatibility"].includes(target),
-  "Unknown consumer check",
+// Keep the import call here so caller-based resolution exercises ESM.
+checkConsumer(
+  (...args) => importSync(...args),
+  fileURLToPath(new URL(".", import.meta.url)),
 );
-if (target === "both" || target === "cjs") {
-  assert.equal(importSync("./fixture.cjs").value, 42);
-}
-if (target === "both" || target === "esm") {
-  assert.equal(importSync("./fixture.mjs").value, 43);
-  assert.equal(importSync("./fixture.mjs").add(2, 3), 5);
-}
-if (target === "both" || target === "compatibility") {
-  assert.equal(importSync("./fixture").value, 43);
-  assert.equal(
-    importSync("./fixture.mjs", {
-      basePath: fileURLToPath(new URL(".", import.meta.url)),
-    }).add(2, 3),
-    5,
-  );
-  assert.throws(() => importSync("./missing.mjs"), /No such file/);
-}

@@ -95,6 +95,17 @@ function pack(
   return archive;
 }
 
+function withPackedRelease(action: (archive: string) => void): void {
+  const root = tempRoot();
+  try {
+    createSource(root);
+    prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
+    action(pack(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function releaseMetadata(root: string, tag: string, sha: string): void {
   mkdirSync(path.join(root, "release-metadata"), { recursive: true });
   writeFileSync(path.join(root, "release-metadata/tag"), `${tag}\n`);
@@ -418,22 +429,15 @@ describe("release artifact packaging", () => {
     }
   });
 
-  it("requires both zero blocks in the tar footer", () => {
-    const root = tempRoot();
-    try {
-      createSource(root);
-      prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
-      const archive = pack(root);
+  it("requires both zero blocks in the tar footer", () =>
+    withPackedRelease((archive) => {
       const bytes = gunzipSync(readFileSync(archive));
       writeFileSync(archive, gzipSync(bytes.subarray(0, bytes.length - 512)));
       assert.throws(
         () => inspectReleaseTarball(archive),
         /Missing or invalid tar footer/,
       );
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+    }));
 
   it("rejects symlinked release inputs", () => {
     const root = tempRoot();
@@ -451,19 +455,12 @@ describe("release artifact packaging", () => {
     }
   });
 
-  it("rejects tampered package archives", () => {
-    const root = tempRoot();
-    try {
-      createSource(root);
-      prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
-      const archive = pack(root);
+  it("rejects tampered package archives", () =>
+    withPackedRelease((archive) => {
       const bytes = readFileSync(archive);
       const offset = bytes.length - 10;
       bytes.writeUInt8(bytes.readUInt8(offset) ^ 0xff, offset);
       writeFileSync(archive, bytes);
       assert.throws(() => inspectReleaseTarball(archive));
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+    }));
 });

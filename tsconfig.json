@@ -13,6 +13,7 @@
     "types/**/*.d.ts",
     "script/**/*.ts",
     "tests/**/*.ts",
+    "tests/**/*.cts",
     "commitlint.config.ts",
     "tsdown.config.ts",
     "vitest.config.ts"
