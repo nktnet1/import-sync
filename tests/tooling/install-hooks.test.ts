@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { afterEach, describe, it, vi } from "vitest";
+import { gitExecutable } from "../../script/command.ts";
 import { installHooks } from "../../script/install-hooks.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -25,23 +26,22 @@ function fixture(): {
   const bin = join(root, "bin");
   mkdirSync(bin);
   const marker = join(root, "installed");
-  const runner = join(bin, "lefthook.cjs");
+  const runner = join(root, "node_modules/lefthook/bin/index.js");
+  mkdirSync(dirname(runner), { recursive: true });
   writeFileSync(
     runner,
     `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'installed');\n`,
   );
-  if (process.platform === "win32") {
-    writeFileSync(
-      join(bin, "lefthook.cmd"),
-      `@echo off\r\n"${process.execPath}" "%~dp0lefthook.cjs"\r\n`,
-    );
-  } else {
-    const executable = join(bin, "lefthook");
-    writeFileSync(
-      executable,
-      `#!/usr/bin/env node\nrequire(${JSON.stringify(runner)});\n`,
-    );
+  writeFileSync(
+    join(root, "node_modules/lefthook/package.json"),
+    '{"name":"lefthook","type":"commonjs"}',
+  );
+  // Project-writable PATH entries must never supply Git or Lefthook.
+  for (const command of ["git", "lefthook"]) {
+    const executable = join(bin, command);
+    writeFileSync(executable, "#!/bin/sh\nexit 91\n");
     chmodSync(executable, 0o755);
+    writeFileSync(`${executable}.cmd`, "@echo off\r\nexit /b 91\r\n");
   }
   const global = join(root, "global.gitconfig");
   writeFileSync(global, "");
@@ -54,7 +54,10 @@ function fixture(): {
     [bin, dirname(process.execPath), process.env.PATH].join(delimiter),
   );
   const git = (args: string[]): string => {
-    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+    const result = spawnSync(gitExecutable(), args, {
+      cwd: root,
+      encoding: "utf8",
+    });
     if (result.error) throw result.error;
     assert.equal(result.status, 0, result.stderr);
     return result.stdout.trim();
@@ -72,7 +75,7 @@ describe("Husky to Lefthook migration", () => {
         git(["config", "--local", "core.hooksPath", hooksPath]);
         installHooks(root);
         const configured = spawnSync(
-          "git",
+          gitExecutable(),
           ["config", "--local", "--get", "core.hooksPath"],
           { cwd: root },
         );

@@ -1,16 +1,20 @@
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { styleText } from "node:util";
+import { gitExecutable } from "./command.ts";
 
 export function installHooks(root: string): void {
   if (process.env.CI || process.env.LEFTHOOK === "0") return;
-  const inside = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
+  const git = gitExecutable();
+  const inside = spawnSync(git, ["rev-parse", "--is-inside-work-tree"], {
     cwd: root,
     encoding: "utf8",
   });
   if (inside.status !== 0 || inside.stdout.trim() !== "true") return;
   const configured = spawnSync(
-    "git",
+    git,
     ["config", "--local", "--get", "core.hooksPath"],
     { cwd: root, encoding: "utf8" },
   );
@@ -27,7 +31,7 @@ export function installHooks(root: string): void {
     )
   ) {
     const unset = spawnSync(
-      "git",
+      git,
       ["config", "--local", "--unset-all", "core.hooksPath"],
       { cwd: root, encoding: "utf8" },
     );
@@ -36,7 +40,7 @@ export function installHooks(root: string): void {
       throw new Error(`Unable to migrate Husky hooks: ${unset.stderr}`);
     console.log(`Migrated ${styleText("cyan", "Husky")} hooks to Lefthook`);
   }
-  const effective = spawnSync("git", ["config", "--get", "core.hooksPath"], {
+  const effective = spawnSync(git, ["config", "--get", "core.hooksPath"], {
     cwd: root,
     encoding: "utf8",
   });
@@ -51,11 +55,15 @@ export function installHooks(root: string): void {
     throw new Error(
       `Unable to read Git hooks configuration: ${effective.stderr}`,
     );
-  const result = spawnSync("lefthook", ["install"], {
+  const lefthook = realpathSync(
+    createRequire(resolve(root, "package.json")).resolve(
+      "lefthook/bin/index.js",
+    ),
+  );
+  const result = spawnSync(process.execPath, [lefthook, "install"], {
     cwd: root,
     stdio: "inherit",
-    // The Windows npm binary shim is a .cmd file; the command has no user input.
-    shell: process.platform === "win32",
+    shell: false,
   });
   if (result.error) throw result.error;
   if (result.status !== 0)

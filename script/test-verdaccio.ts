@@ -5,9 +5,10 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { runCommand, runNpm } from "./command.ts";
+import { type CommandOptions, runCommand, runNpm } from "./command.ts";
 import { prepareReleasePackage } from "./prepare-release-package.ts";
 import {
+  type ConsumerFormat,
   consumerFormats,
   createRegistryReporter,
   formatName,
@@ -15,6 +16,7 @@ import {
 } from "./registry-reporter.ts";
 import { parseReleaseVersion } from "./release-policy.ts";
 import { inspectReleaseTarball } from "./release-publisher.ts";
+import { runSequential } from "./sequential.ts";
 
 const root = await fs.realpath(path.resolve(import.meta.dirname, ".."));
 
@@ -73,29 +75,69 @@ export async function stopRegistry(
   }
 }
 
-export async function runRegistryTest(
-  args = process.argv.slice(2),
-): Promise<void> {
-  const { values } = parseArgs({
-    args,
-    options: {
-      format: { type: "string", default: "both" },
-      verbose: { type: "boolean", default: false },
-    },
+export async function spawnRegistry({
+  directory,
+  name,
+  verdaccioModule,
+  env,
+  onOutput,
+}: {
+  directory: string;
+  name: string;
+  verdaccioModule: string;
+  env: NodeJS.ProcessEnv;
+  onOutput: (chunk: string) => void;
+}): Promise<ChildProcess> {
+  const configPath = path.join(directory, "config.yaml");
+  // JSON is valid YAML and quotes filesystem paths safely on every platform.
+  await fs.writeFile(
+    configPath,
+    JSON.stringify({
+      storage: path.join(directory, "storage"),
+      auth: {
+        htpasswd: {
+          file: path.join(directory, "htpasswd"),
+          max_users: 10,
+        },
+      },
+      uplinks: { npmjs: { url: "https://registry.npmjs.org/" } },
+      packages: {
+        [name]: { access: "$all", publish: "$authenticated" },
+        "**": { access: "$all", proxy: "npmjs" },
+      },
+      log: { type: "stdout", format: "pretty", level: "warn" },
+    }),
+  );
+  const serverPath = path.join(directory, "server.cjs");
+  await fs.writeFile(
+    serverPath,
+    `const { runServer } = require(process.argv[2]);
+runServer(process.argv[3]).then((app) => {
+  const server = app.listen(0, '127.0.0.1', () => {
+    process.send({ port: server.address().port });
   });
-  const formats = consumerFormats(values.format);
-  const manifest: { name: string; version: string } = JSON.parse(
-    await fs.readFile(path.join(root, "package.json"), "utf8"),
+  const shutdown = () => server.close(() => process.exit(0));
+  process.once('SIGTERM', shutdown);
+  process.once('disconnect', shutdown);
+}).catch((error) => { console.error(error); process.exit(1); });
+`,
   );
-  const { distTag } = parseReleaseVersion(manifest.version);
-  const report = createRegistryReporter(formats, values.verbose);
-  report.header(manifest.name, manifest.version);
-  const temporary = await fs.realpath(
-    await fs.mkdtemp(path.join(tmpdir(), "import-sync-registry-")),
-  );
-  const registryRoot = path.join(temporary, "registry");
-  const npmrc = path.join(temporary, ".npmrc");
-  const globalNpmrc = path.join(temporary, "global.npmrc");
+  const child = fork(serverPath, [verdaccioModule, configPath], {
+    cwd: directory,
+    env,
+    execPath: process.execPath,
+    execArgv: [],
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+  });
+  for (const stream of [child.stdout, child.stderr]) {
+    stream?.setEncoding("utf8").on("data", (chunk: string) => {
+      onOutput(chunk);
+    });
+  }
+  return child;
+}
+
+function registryEnvironment(temporary: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const key of Object.keys(env)) {
     if (
@@ -121,8 +163,8 @@ export async function runRegistryTest(
       path.dirname(process.execPath) +
       path.delimiter +
       (process.env.PATH ?? ""),
-    NPM_CONFIG_USERCONFIG: npmrc,
-    NPM_CONFIG_GLOBALCONFIG: globalNpmrc,
+    NPM_CONFIG_USERCONFIG: path.join(temporary, ".npmrc"),
+    NPM_CONFIG_GLOBALCONFIG: path.join(temporary, "global.npmrc"),
     NPM_CONFIG_CACHE: path.join(temporary, "npm-cache"),
     NPM_CONFIG_AUDIT: "false",
     NPM_CONFIG_FUND: "false",
@@ -131,6 +173,137 @@ export async function runRegistryTest(
       .filter(Boolean)
       .join(","),
   });
+  return env;
+}
+
+interface ConsumerContext {
+  temporary: string;
+  manifest: { name: string; version: string };
+  registry: string;
+  command: CommandOptions;
+  report: ReturnType<typeof createRegistryReporter>;
+}
+
+async function verifyInstalledRelease(
+  consumer: string,
+  manifest: ConsumerContext["manifest"],
+): Promise<void> {
+  const installedRoot = path.join(consumer, "node_modules/import-sync");
+  const installed: { name: string; version: string; scripts?: unknown } =
+    JSON.parse(
+      await fs.readFile(path.join(installedRoot, "package.json"), "utf8"),
+    );
+  if (
+    installed.name !== manifest.name ||
+    installed.version !== manifest.version ||
+    installed.scripts
+  )
+    throw new Error("Installed package does not match the staged release");
+  await Promise.all(
+    ["dist/index.cjs", "dist/index.d.cts"].map(async (file) => {
+      const stats = await fs.stat(path.join(installedRoot, file));
+      if (!stats.isFile() || stats.size === 0)
+        throw new Error(`Missing or empty installed file: ${file}`);
+    }),
+  );
+}
+
+async function testConsumer(
+  project: ConsumerFormat,
+  { temporary, manifest, registry, command, report }: ConsumerContext,
+): Promise<void> {
+  const consumer = path.join(temporary, `consumer-${project}`);
+  const label = project.toUpperCase();
+  const type = project === "cjs" ? "commonjs" : "module";
+  report.section(`${formatName(project)} PROJECT`, `type: "${type}"`);
+  await report.stage(label, "Create isolated consumer project", async () => {
+    await fs.cp(path.join(root, "tests/packed"), consumer, { recursive: true });
+    await fs.writeFile(
+      path.join(consumer, "package.json"),
+      JSON.stringify({
+        name: `import-sync-consumer-${project}`,
+        private: true,
+        type,
+      }),
+    );
+    // .js inherits the project's type; every import pair runs in its own process.
+    await fs.copyFile(
+      path.join(consumer, `check.${project === "cjs" ? "cjs" : "mjs"}`),
+      path.join(consumer, "check.js"),
+    );
+  });
+  await report.stage(
+    label,
+    "Install the published package and its runtime dependencies",
+    () =>
+      runNpm(
+        [
+          "install",
+          `${manifest.name}@${manifest.version}`,
+          "--registry",
+          registry,
+          "--ignore-scripts=false",
+          "--foreground-scripts",
+          "--package-lock=false",
+          "--no-audit",
+          "--no-fund",
+        ],
+        { ...command, cwd: consumer },
+      ),
+  );
+  await report.stage("VERIFY", "Check installed release files", () =>
+    verifyInstalledRelease(consumer, manifest),
+  );
+  await runSequential(moduleFormats, (target) =>
+    report.check(project, target, () =>
+      report.stage(
+        "TEST",
+        `${formatName(project)} project importing ${formatName(target)} module`,
+        () =>
+          runCommand(process.execPath, ["check.js", target], {
+            ...command,
+            cwd: consumer,
+          }),
+      ),
+    ),
+  );
+  await report.check(project, "compatibility", () =>
+    report.stage(
+      "CHECK",
+      "Extension lookup, basePath, and missing-file errors",
+      () =>
+        runCommand(process.execPath, ["check.js", "compatibility"], {
+          ...command,
+          cwd: consumer,
+        }),
+    ),
+  );
+}
+
+export async function runRegistryTest(
+  args = process.argv.slice(2),
+): Promise<void> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      format: { type: "string", default: "both" },
+      verbose: { type: "boolean", default: false },
+    },
+  });
+  const formats = consumerFormats(values.format);
+  const manifest: { name: string; version: string } = JSON.parse(
+    await fs.readFile(path.join(root, "package.json"), "utf8"),
+  );
+  const { distTag } = parseReleaseVersion(manifest.version);
+  const report = createRegistryReporter(formats, values.verbose);
+  report.header(manifest.name, manifest.version);
+  const temporary = await fs.realpath(
+    await fs.mkdtemp(path.join(tmpdir(), "import-sync-registry-")),
+  );
+  const registryRoot = path.join(temporary, "registry");
+  const npmrc = path.join(temporary, ".npmrc");
+  const globalNpmrc = path.join(temporary, "global.npmrc");
+  const env = registryEnvironment(temporary);
   const command = { env, cwd: temporary, inherit: values.verbose };
   let child: ChildProcess | undefined;
   let registryLog = "";
@@ -187,52 +360,16 @@ export async function runRegistryTest(
       "REGISTRY",
       "Start temporary local registry",
       async () => {
-        const configPath = path.join(registryRoot, "config.json");
-        await fs.writeFile(
-          configPath,
-          JSON.stringify({
-            storage: path.join(registryRoot, "storage"),
-            auth: {
-              htpasswd: {
-                file: path.join(registryRoot, "htpasswd"),
-                max_users: 10,
-              },
-            },
-            uplinks: { npmjs: { url: "https://registry.npmjs.org/" } },
-            packages: {
-              [manifest.name]: { access: "$all", publish: "$authenticated" },
-              "**": { access: "$all", proxy: "npmjs" },
-            },
-            log: { type: "stdout", format: "pretty", level: "warn" },
-          }),
-        );
-        const serverPath = path.join(registryRoot, "server.cjs");
-        await fs.writeFile(
-          serverPath,
-          `const { runServer } = require(process.argv[2]);
-runServer(process.argv[3]).then((app) => {
-  const server = app.listen(0, '127.0.0.1', () => {
-    process.send({ port: server.address().port });
-  });
-  const shutdown = () => server.close(() => process.exit(0));
-  process.once('SIGTERM', shutdown);
-  process.once('disconnect', shutdown);
-}).catch((error) => { console.error(error); process.exit(1); });
-`,
-        );
-        child = fork(serverPath, [verdaccioModule, configPath], {
-          cwd: registryRoot,
+        child = await spawnRegistry({
+          directory: registryRoot,
+          name: manifest.name,
+          verdaccioModule,
           env,
-          execPath: process.execPath,
-          execArgv: [],
-          stdio: ["ignore", "pipe", "pipe", "ipc"],
-        });
-        for (const stream of [child.stdout, child.stderr]) {
-          stream?.setEncoding("utf8").on("data", (chunk: string) => {
+          onOutput(chunk) {
             registryLog = (registryLog + chunk).slice(-16_000);
             if (values.verbose) process.stderr.write(chunk);
-          });
-        }
+          },
+        });
         return registryReady(child);
       },
     );
@@ -315,111 +452,9 @@ runServer(process.argv[3]).then((app) => {
       },
     );
 
-    for (const project of formats) {
-      const consumer = path.join(temporary, `consumer-${project}`);
-      const label = project.toUpperCase();
-      report.section(
-        `${formatName(project)} PROJECT`,
-        `type: "${project === "cjs" ? "commonjs" : "module"}"`,
-      );
-      await report.stage(
-        label,
-        "Create isolated consumer project",
-        async () => {
-          await fs.cp(path.join(root, "tests/packed"), consumer, {
-            recursive: true,
-          });
-          await fs.writeFile(
-            path.join(consumer, "package.json"),
-            JSON.stringify({
-              name: `import-sync-consumer-${project}`,
-              private: true,
-              type: project === "cjs" ? "commonjs" : "module",
-            }),
-          );
-          // .js inherits the project's type; the two import pairs are run in
-          // separate Node processes and receive separate PASS/FAIL results.
-          await fs.copyFile(
-            path.join(consumer, `check.${project === "cjs" ? "cjs" : "mjs"}`),
-            path.join(consumer, "check.js"),
-          );
-        },
-      );
-      await report.stage(
-        label,
-        "Install the published package and its runtime dependencies",
-        () =>
-          runNpm(
-            [
-              "install",
-              `${manifest.name}@${manifest.version}`,
-              "--registry",
-              registry,
-              "--ignore-scripts=false",
-              "--foreground-scripts",
-              "--package-lock=false",
-              "--no-audit",
-              "--no-fund",
-            ],
-            { ...command, cwd: consumer },
-          ),
-      );
-      await report.stage(
-        "VERIFY",
-        "Check installed release files",
-        async () => {
-          const installed: {
-            name: string;
-            version: string;
-            scripts?: unknown;
-          } = JSON.parse(
-            await fs.readFile(
-              path.join(consumer, "node_modules/import-sync/package.json"),
-              "utf8",
-            ),
-          );
-          if (
-            installed.name !== manifest.name ||
-            installed.version !== manifest.version ||
-            installed.scripts
-          )
-            throw new Error(
-              "Installed package does not match the staged release",
-            );
-          for (const file of ["dist/index.cjs", "dist/index.d.cts"]) {
-            const stats = await fs.stat(
-              path.join(consumer, "node_modules/import-sync", file),
-            );
-            if (!stats.isFile() || stats.size === 0)
-              throw new Error(`Missing or empty installed file: ${file}`);
-          }
-        },
-      );
-      for (const target of moduleFormats) {
-        await report.check(project, target, () =>
-          report.stage(
-            "TEST",
-            `${formatName(project)} project importing ${formatName(target)} module`,
-            () =>
-              runCommand(process.execPath, ["check.js", target], {
-                ...command,
-                cwd: consumer,
-              }),
-          ),
-        );
-      }
-      await report.check(project, "compatibility", () =>
-        report.stage(
-          "CHECK",
-          "Extension lookup, basePath, and missing-file errors",
-          () =>
-            runCommand(process.execPath, ["check.js", "compatibility"], {
-              ...command,
-              cwd: consumer,
-            }),
-        ),
-      );
-    }
+    await runSequential(formats, (project) =>
+      testConsumer(project, { temporary, manifest, registry, command, report }),
+    );
   } catch (error) {
     failure = error instanceof Error ? error : new Error(String(error));
     if (registryLog)
@@ -454,8 +489,10 @@ runServer(process.argv[3]).then((app) => {
 }
 
 if (import.meta.main) {
-  runRegistryTest().catch((error: unknown) => {
+  try {
+    await runRegistryTest();
+  } catch (error) {
     console.error(error);
     process.exitCode = 1;
-  });
+  }
 }

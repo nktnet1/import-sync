@@ -3,6 +3,10 @@
 Development and release tooling requires Node.js 22.18+; release CI uses Node 24.
 Install the project's pnpm dependencies before running the release scripts.
 The scripts use installed tools and do not download missing tooling.
+Registry and release commands also need npm. The tooling job uses `actions/setup-node`
+to install Node and npm together; pnpm-managed Node runtimes omit npm. The scripts
+prefer bundled npm and can locate a separate installation through its canonical
+CLI, without executing shell wrappers or searching relative PATH entries.
 
 ## One-time npm configuration
 
@@ -85,8 +89,9 @@ an already-published version.
 
 `pnpm test:verdaccio` starts the pinned Verdaccio development dependency on an
 ephemeral loopback port with temporary storage, npm configuration, cache, and
-publisher credentials. It builds and packs through the release staging code,
-publishes to the local registry, and installs that exact version in independent
+publisher credentials. It builds and packs through the release staging code
+and writes its temporary registry configuration as `config.yaml` for Verdaccio 7.
+It publishes to the local registry and installs that exact version in independent
 CommonJS and ESM projects. All four project/module combinations run in separate
 Node processes and have individual results. Each project also exercises extension
 lookup, `basePath`, and missing-file errors in a separate compatibility check. Dependency
@@ -102,3 +107,6 @@ only a local `core.hooksPath` left by Husky (`.husky` or `.husky/_`). Custom or
 global hook settings are preserved. Hook installation is skipped in CI and
 when `LEFTHOOK=0`. The pre-commit hook runs Biome on staged files and stages
 its fixes; the commit-msg hook retains conventional commit validation.
+Git commands use standard OS installation directories. Lefthook runs its installed
+package CLI through Node, so project PATH entries and Windows `.cmd` shims cannot
+replace either command.

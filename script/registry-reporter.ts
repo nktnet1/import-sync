@@ -17,6 +17,20 @@ export function formatName(format: ConsumerFormat): string {
   );
 }
 
+function stageCategory(label: string): string {
+  if (label === "CJS") return formatName("cjs");
+  if (label === "ESM") return formatName("esm");
+  return styleText(label === "CLEANUP" ? "yellow" : "cyan", label);
+}
+
+function resultToken(result: boolean | undefined): string {
+  if (result === undefined) return styleText(["bold", "yellow"], "NOT RUN");
+  return styleText(
+    ["bold", result ? "green" : "red"],
+    result ? "PASS" : "FAIL",
+  );
+}
+
 export function createRegistryReporter(
   formats: readonly ConsumerFormat[],
   verbose = false,
@@ -34,9 +48,9 @@ export function createRegistryReporter(
   let failedStage: string | undefined;
 
   function section(title: string, detail?: string): void {
-    write(
-      `\n  ${styleText("blue", String(++sectionNumber).padStart(2, "0"))}  ${title}${detail ? `  ${detail}` : ""}\n`,
-    );
+    const number = styleText("blue", String(++sectionNumber).padStart(2, "0"));
+    const suffix = detail ? `  ${detail}` : "";
+    write(`\n  ${number}  ${title}${suffix}\n`);
     write(`  ${"-".repeat(73)}\n`);
   }
 
@@ -47,19 +61,13 @@ export function createRegistryReporter(
   ): Promise<T> {
     activeStage = `${label}: ${stripVTControlCharacters(description)}`;
     const number = `[${String(++stageNumber).padStart(2, "0")}/${stageTotal}]`;
-    const category =
-      label === "CJS" || label === "ESM"
-        ? formatName(label === "CJS" ? "cjs" : "esm")
-        : styleText(label === "CLEANUP" ? "yellow" : "cyan", label);
+    const category = stageCategory(label);
     const prefix = `    ${styleText("dim", number)}  ${category}${" ".repeat(Math.max(2, 11 - label.length))}${description}`;
     const line = `${prefix}${" ".repeat(Math.max(2, 87 - stripVTControlCharacters(prefix).length))}`;
     write(verbose ? `${prefix}\n` : line);
     const started = Date.now();
     function status(success: boolean): void {
-      const token = styleText(
-        ["bold", success ? "green" : "red"],
-        success ? "PASS" : "FAIL",
-      );
+      const token = resultToken(success);
       write(
         `${verbose ? "            " : ""}${token}  ${((Date.now() - started) / 1000).toFixed(1)}s\n`,
       );
@@ -90,19 +98,16 @@ export function createRegistryReporter(
   }
 
   function resultRow(name: string, result: boolean | undefined): void {
-    const token = result === undefined ? "NOT RUN" : result ? "PASS" : "FAIL";
-    const colour = result === undefined ? "yellow" : result ? "green" : "red";
     const gap = " ".repeat(
       Math.max(2, 60 - stripVTControlCharacters(name).length),
     );
-    write(`    ${name}${gap}${styleText(["bold", colour], token)}\n`);
+    write(`    ${name}${gap}${resultToken(result)}\n`);
   }
 
   return {
     header(name: string, version: string): void {
-      write(
-        `\n  ${styleText(["bold", "cyan"], "VERDACCIO")}  ${styleText("magenta", `${name}@${version}`)}\n`,
-      );
+      const label = styleText("magenta", `${name}@${version}`);
+      write(`\n  ${styleText(["bold", "cyan"], "VERDACCIO")}  ${label}\n`);
       write(
         `  Publish and install smoke tests  Node ${process.version}  |  ${formats.map((format) => format.toUpperCase()).join(" + ")}${verbose ? "  |  verbose" : ""}\n`,
       );
@@ -133,12 +138,20 @@ export function createRegistryReporter(
           result,
         );
       }
-      write(
-        `\n  ${styleText(["bold", success ? "green" : "red"], success ? "PASS" : "FAIL")}  ${styleText("cyan", `${importsPassed}/${formats.length * moduleFormats.length}`)} import pairs  |  ${styleText("cyan", `${compatibilityPassed}/${formats.length}`)} compatibility checks\n`,
+      const importCount = styleText(
+        "cyan",
+        `${importsPassed}/${formats.length * moduleFormats.length}`,
+      );
+      const compatibilityCount = styleText(
+        "cyan",
+        `${compatibilityPassed}/${formats.length}`,
       );
       write(
-        `  ${success ? "Published package verified in isolated projects" : `Stopped at ${failedStage ?? activeStage}`}.\n\n`,
+        `\n  ${resultToken(success)}  ${importCount} import pairs  |  ${compatibilityCount} compatibility checks\n`,
       );
+      let message = "Published package verified in isolated projects";
+      if (!success) message = `Stopped at ${failedStage ?? activeStage}`;
+      write(`  ${message}.\n\n`);
     },
   };
 }

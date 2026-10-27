@@ -1,7 +1,7 @@
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs, styleText } from "node:util";
-import { runCommand, runNpm, runPnpm } from "./command.ts";
+import { gitExecutable, runCommand, runNpm, runPnpm } from "./command.ts";
 import { nextBetaVersion, versionFromTag } from "./release-policy.ts";
 
 const root = realpathSync(resolve(import.meta.dirname, ".."));
@@ -15,7 +15,7 @@ const { values } = parseArgs({
 });
 
 function git(args: string[]): string {
-  return runCommand("git", args, { cwd: root }).trim();
+  return runCommand(gitExecutable(), args, { cwd: root }).trim();
 }
 
 function publishedVersions(): string[] {
@@ -115,7 +115,7 @@ If a check fails, inspect the uncommitted package.json change before retrying.`)
   git(["commit", "-m", `chore(release): ${version}`]);
   git(["tag", "-a", tag, "-m", tag]);
   runCommand(
-    "git",
+    gitExecutable(),
     ["push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`],
     { cwd: root, inherit: true },
   );

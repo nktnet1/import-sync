@@ -104,9 +104,8 @@ export function prepareReleasePackage({
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
   if (!quiet) {
-    console.log(
-      `Prepared ${styleText("green", `import-sync@${version}`)} in .release/package`,
-    );
+    const label = styleText("green", `import-sync@${version}`);
+    console.log(`Prepared ${label} in .release/package`);
   }
 }
 

@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, it } from "vitest";
 import { prepareReleasePackage } from "../../script/prepare-release-package.ts";
 import {
@@ -363,18 +363,73 @@ describe("release artifact packaging", () => {
     }
   });
 
-  it("rejects archives missing a required public entry", () => {
+  it.each(required)("rejects archives missing %s", (missing) => {
     const root = tempRoot();
     try {
       createSource(root);
       prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
       const archive = pack(root, [
-        ...required.filter((name) => name !== "dist/index.cjs"),
+        ...required.filter((name) => name !== missing),
         "README.md",
         "LICENSE",
         "package.json",
       ]);
-      assert.throws(() => inspectReleaseTarball(archive), /dist\/index\.cjs/);
+      assert.throws(() => inspectReleaseTarball(archive), {
+        message: `Missing or empty release tarball member: package/${missing}`,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([null, [], "invalid"])(
+    "rejects a non-object manifest %j",
+    (manifest) => {
+      const root = tempRoot();
+      try {
+        createSource(root);
+        prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
+        writeFileSync(
+          path.join(root, ".release/package/package.json"),
+          JSON.stringify(manifest),
+        );
+        assert.throws(
+          () => inspectReleaseTarball(pack(root)),
+          /Invalid release package manifest/,
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rejects duplicate archive members", () => {
+    const root = tempRoot();
+    try {
+      createSource(root);
+      prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
+      const archive = pack(root, [...required, "package.json", "package.json"]);
+      assert.throws(
+        () => inspectReleaseTarball(archive),
+        /Duplicate tar entry/,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("requires both zero blocks in the tar footer", () => {
+    const root = tempRoot();
+    try {
+      createSource(root);
+      prepareReleasePackage({ root, tag: "v2.2.7-beta.2" });
+      const archive = pack(root);
+      const bytes = gunzipSync(readFileSync(archive));
+      writeFileSync(archive, gzipSync(bytes.subarray(0, bytes.length - 512)));
+      assert.throws(
+        () => inspectReleaseTarball(archive),
+        /Missing or invalid tar footer/,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

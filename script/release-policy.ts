@@ -10,7 +10,7 @@ export type ReleaseVersion = {
 
 export function parseReleaseVersion(version: string): ReleaseVersion {
   const match = versionPattern.exec(version);
-  if (!match || match[0] !== version)
+  if (match?.[0] !== version)
     throw new Error(`Unsupported release version: ${version}`);
   return {
     version,
@@ -39,6 +39,33 @@ export function compareReleaseBases(left: string, right: string): number {
   return 0;
 }
 
+function knownReleases(versions: readonly string[]): ReleaseVersion[] {
+  return versions.flatMap((version) => {
+    try {
+      return [parseReleaseVersion(version)];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function requireUnreleasedBase(
+  base: string,
+  existing: readonly ReleaseVersion[],
+): void {
+  for (const candidate of existing) {
+    if (candidate.beta !== undefined) continue;
+    if (compareReleaseBases(candidate.base, base) > 0)
+      throw new Error(
+        `A newer stable version (${candidate.base}) is already released`,
+      );
+    if (candidate.base === base)
+      throw new Error(
+        `${base} is already released; choose a new base explicitly with --base <version>`,
+      );
+  }
+}
+
 export function nextBetaVersion(
   current: string,
   published: readonly string[],
@@ -56,35 +83,14 @@ export function nextBetaVersion(
       "--base cannot be earlier than the current package version",
     );
 
-  const existing = [...published, ...tags.map((tag) => tag.replace(/^v/, ""))];
-  for (const version of existing) {
-    let candidate: ReleaseVersion;
-    try {
-      candidate = parseReleaseVersion(version);
-    } catch {
-      continue;
-    }
-    if (
-      candidate.beta === undefined &&
-      compareReleaseBases(candidate.base, base.base) > 0
-    )
-      throw new Error(
-        `A newer stable version (${candidate.base}) is already released`,
-      );
-    if (candidate.base === base.base && candidate.beta === undefined)
-      throw new Error(
-        `${base.base} is already released; choose a new base explicitly with --base <version>`,
-      );
-  }
+  const existing = knownReleases([
+    ...published,
+    ...tags.map((tag) => tag.replace(/^v/, "")),
+  ]);
+  requireUnreleasedBase(base.base, existing);
 
   let highest = 0n;
-  for (const version of [current, ...existing]) {
-    let candidate: ReleaseVersion;
-    try {
-      candidate = parseReleaseVersion(version);
-    } catch {
-      continue;
-    }
+  for (const candidate of [currentRelease, ...existing]) {
     if (candidate.base === base.base && candidate.beta !== undefined) {
       const number = BigInt(candidate.beta);
       if (number > highest) highest = number;

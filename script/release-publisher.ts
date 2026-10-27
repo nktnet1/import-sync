@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { styleText } from "node:util";
 import { gunzipSync } from "node:zlib";
-import { npmCliPath } from "./command.ts";
+import { gitExecutable, npmCliPath } from "./command.ts";
 import {
   parseReleaseVersion,
   validateReleaseManifest,
@@ -53,7 +53,7 @@ function tarEntry(header: Buffer): {
     throw new Error("Tar links and extended entries are not allowed");
   const entry = tarString(header, 0, 100);
   const prefix = tarString(header, 345, 155);
-  const name = `${prefix ? `${prefix}/` : ""}${entry}`.replace(/\/$/, "");
+  const name = [prefix, entry].filter(Boolean).join("/").replace(/\/$/, "");
   const segments = name.split("/");
   const directory = type === 53;
   if (
@@ -73,6 +73,30 @@ export interface ReleaseTarball {
   manifest: Record<string, unknown>;
 }
 
+function releaseManifest(bytes: Buffer): Record<string, unknown> {
+  if (bytes.length > maxManifestBytes)
+    throw new Error("Oversized package manifest");
+  const parsed: unknown = JSON.parse(bytes.toString("utf8"));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("Invalid release package manifest");
+  return parsed as Record<string, unknown>;
+}
+
+function validTarFooter(archive: Buffer, offset: number): boolean {
+  return (
+    archive.length - offset >= 2 * tarBlockSize &&
+    archive.length % tarBlockSize === 0 &&
+    archive.subarray(offset).every((byte) => byte === 0)
+  );
+}
+
+function requireReleaseEntries(entries: ReadonlyMap<string, number>): void {
+  for (const name of ["package/dist/index.cjs", "package/dist/index.d.cts"]) {
+    if (!entries.has(name) || entries.get(name) === 0)
+      throw new Error(`Missing or empty release tarball member: ${name}`);
+  }
+}
+
 /** Inspect an npm tarball without extracting it or executing its lifecycle scripts. */
 export function inspectReleaseTarball(file: string): ReleaseTarball {
   const archive = gunzipSync(readFileSync(file), {
@@ -84,10 +108,7 @@ export function inspectReleaseTarball(file: string): ReleaseTarball {
   for (let offset = 0; offset + tarBlockSize <= archive.length; ) {
     const header = archive.subarray(offset, offset + tarBlockSize);
     if (header.every((byte) => byte === 0)) {
-      footer =
-        archive.length - offset >= 2 * tarBlockSize &&
-        archive.length % tarBlockSize === 0 &&
-        archive.subarray(offset).every((byte) => byte === 0);
+      footer = validTarFooter(archive, offset);
       break;
     }
     const { name, size, directory } = tarEntry(header);
@@ -97,24 +118,13 @@ export function inspectReleaseTarball(file: string): ReleaseTarball {
     const end = start + size;
     const next = start + Math.ceil(size / tarBlockSize) * tarBlockSize;
     if (next > archive.length) throw new Error("Truncated release tarball");
-    if (name === "package/package.json" && !directory) {
-      if (size > maxManifestBytes)
-        throw new Error("Oversized package manifest");
-      const parsed: unknown = JSON.parse(
-        archive.subarray(start, end).toString("utf8"),
-      );
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-        throw new Error("Invalid release package manifest");
-      manifest = parsed as Record<string, unknown>;
-    }
+    if (name === "package/package.json" && !directory)
+      manifest = releaseManifest(archive.subarray(start, end));
     offset = next;
   }
   if (!footer) throw new Error("Missing or invalid tar footer");
   if (!manifest) throw new Error("Release tarball is missing package.json");
-  for (const name of ["package/dist/index.cjs", "package/dist/index.d.cts"]) {
-    if (!entries.has(name) || entries.get(name) === 0)
-      throw new Error(`Missing or empty release tarball member: ${name}`);
-  }
+  requireReleaseEntries(entries);
   if (manifest.scripts !== undefined)
     throw new Error("Release tarball has unexpected lifecycle scripts");
   return { file, manifest };
@@ -142,7 +152,7 @@ function verifyRemoteTag(root: string, tag: string, sha: string): void {
   const ref = `refs/tags/v${version}`;
   const refs = [ref, `${ref}^{}`];
   const result = spawnSync(
-    "git",
+    gitExecutable(),
     ["ls-remote", "--tags", "--", "origin", ...refs],
     {
       cwd: root,
@@ -248,12 +258,12 @@ async function checkPublished(
 async function confirmPublication(
   context: RegistryContext,
   artifact: ReleaseTarball,
+  attempt = 1,
 ): Promise<boolean> {
-  for (let i = 1; i <= 3; i++) {
-    if (await checkPublished(context, artifact)) return true;
-    if (i < 3) await setTimeout(retryDelay(i));
-  }
-  return false;
+  if (await checkPublished(context, artifact)) return true;
+  if (attempt >= 3) return false;
+  await setTimeout(retryDelay(attempt));
+  return confirmPublication(context, artifact, attempt + 1);
 }
 
 function attemptPublish(
@@ -308,31 +318,29 @@ async function publishWithRecovery(
   context: RegistryContext,
   artifact: ReleaseTarball,
   distTag: string,
+  attempt = 1,
 ): Promise<void> {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const result = attemptPublish(context, artifact, distTag);
-    if (result.success) return;
-    let published: boolean;
-    try {
-      published = await confirmPublication(context, artifact);
-    } catch (error) {
-      throw new Error(
-        "Publish failed and registry state could not be verified; do not retry blindly",
-        {
-          cause: error,
-        },
-      );
-    }
-    if (published) {
-      console.log(
-        `${styleText("green", "RECOVERED")} registry accepted the exact tarball`,
-      );
-      return;
-    }
-    if (!result.transient || attempt === 3) throw result.error;
-    console.warn(`${styleText("yellow", "RETRY")} npm publish (${attempt}/3)`);
-    await setTimeout(retryDelay(attempt));
+  const result = attemptPublish(context, artifact, distTag);
+  if (result.success) return;
+  let published: boolean;
+  try {
+    published = await confirmPublication(context, artifact);
+  } catch (error) {
+    throw new Error(
+      "Publish failed and registry state could not be verified; do not retry blindly",
+      { cause: error },
+    );
   }
+  if (published) {
+    console.log(
+      `${styleText("green", "RECOVERED")} registry accepted the exact tarball`,
+    );
+    return;
+  }
+  if (!result.transient || attempt === 3) throw result.error;
+  console.warn(`${styleText("yellow", "RETRY")} npm publish (${attempt}/3)`);
+  await setTimeout(retryDelay(attempt));
+  return publishWithRecovery(context, artifact, distTag, attempt + 1);
 }
 
 export interface PublishOptions {
@@ -395,9 +403,8 @@ export async function publishReleasePackage({
   const artifact = inspectReleaseTarball(file);
   validateReleaseManifest(artifact.manifest, releaseTag);
   if (dryRun) {
-    console.log(
-      `Would publish ${styleText("cyan", `import-sync@${version}`)} --tag ${distTag}`,
-    );
+    const label = styleText("cyan", `import-sync@${version}`);
+    console.log(`Would publish ${label} --tag ${distTag}`);
     return;
   }
 
