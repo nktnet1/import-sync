@@ -122,7 +122,7 @@ function publishCount(): number {
 
 beforeEach(() => {
   commands.spawn.mockReset();
-  commands.delay.mockReset().mockResolvedValue(undefined);
+  commands.delay.mockReset().mockImplementation(() => Promise.resolve());
 });
 
 describe("publication recovery", () => {

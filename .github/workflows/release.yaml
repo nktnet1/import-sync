@@ -33,9 +33,8 @@ jobs:
         with:
           install: false
 
-      # Follow Pipeline until its lockfile refresh is committed.
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build production package
         run: pnpm build

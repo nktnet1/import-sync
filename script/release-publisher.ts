@@ -340,7 +340,7 @@ async function publishWithRecovery(
   if (!result.transient || attempt === 3) throw result.error;
   console.warn(`${styleText("yellow", "RETRY")} npm publish (${attempt}/3)`);
   await setTimeout(retryDelay(attempt));
-  return publishWithRecovery(context, artifact, distTag, attempt + 1);
+  await publishWithRecovery(context, artifact, distTag, attempt + 1);
 }
 
 export interface PublishOptions {

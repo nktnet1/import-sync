@@ -46,7 +46,8 @@ function npmLocations(bin: string): string[] {
 function installedNpmCli(candidate: string): string | undefined {
   try {
     const file = realpathSync(candidate);
-    if (basename(file) !== "npm-cli.js" || !lstatSync(file).isFile()) return;
+    if (basename(file) !== "npm-cli.js" || !lstatSync(file).isFile())
+      return undefined;
     const manifest: { name?: unknown; bin?: { npm?: unknown } } = JSON.parse(
       readFileSync(resolve(dirname(file), "../package.json"), "utf8"),
     );
@@ -59,6 +60,7 @@ function installedNpmCli(candidate: string): string | undefined {
   } catch {
     // Ignore missing installations, wrappers and unrelated executables.
   }
+  return undefined;
 }
 
 // Invoke the actual npm CLI with the current Node, never a shell or npm.cmd.
@@ -104,7 +106,7 @@ export function gitExecutable(): string {
         ]
           .filter(
             (directory): directory is string =>
-              !!directory && isAbsolute(directory),
+              typeof directory === "string" && isAbsolute(directory),
           )
           .flatMap((directory) => [
             resolve(directory, "Git/cmd/git.exe"),

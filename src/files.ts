@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import { VALID_FILE_EXTENSIONS } from "./config";
 
 type CallSite = {
@@ -19,7 +19,7 @@ type CallSite = {
 export const getCallerDirname = (): string => {
   const orig = Error.prepareStackTrace;
   Error.prepareStackTrace = (_, stack) => stack;
-  const err = new Error();
+  const err = new Error("Capture caller stack trace");
   Error.captureStackTrace(err, getCallerDirname);
   const stack = err.stack as unknown as CallSite[];
   Error.prepareStackTrace = orig;

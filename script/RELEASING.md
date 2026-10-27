@@ -19,9 +19,11 @@ is needed in GitHub secrets.
 Merge these workflows and scripts into the default branch before pushing a
 release tag. Protect `main` and `v*` tags so only maintainers can release.
 
-The patch changes development dependencies without including a generated
-lockfile. Commit a refreshed lockfile, then replace CI's
-`pnpm install --no-frozen-lockfile` with `pnpm install --frozen-lockfile`.
+CI uses `pnpm install --frozen-lockfile --ignore-scripts` for dependency
+installation. Refresh and commit `pnpm-lock.yaml` whenever dependencies or the
+pinned pnpm version change; CI rejects an outdated lockfile. Installation hooks,
+including the root `prepare` hook, are disabled in CI. The native-import fixture
+uses node-datachannel's prebuilt platform packages.
 
 ## Beta releases
 

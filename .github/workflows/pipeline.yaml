@@ -39,10 +39,8 @@ jobs:
           cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
 
-      # Refresh the lockfile before re-enabling frozen installs; generated
-      # lockfile changes are kept out of incremental patches.
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build and test library
         run: pnpm test --exclude "tests/tooling/**"
@@ -69,7 +67,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Check formatting and lint
         run: pnpm check
