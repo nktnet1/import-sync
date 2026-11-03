@@ -20,6 +20,13 @@ test("recreates Node's built-in import conditions", () => {
   );
 });
 
+test("defaults to process flags and ignores unrelated CLI arguments", () => {
+  expect(getImportConditions().has("node")).toBe(true);
+  expect(getImportConditions(["--trace-warnings"], "")).toEqual(
+    new Set(["node", "import", "default", "module-sync", "node-addons"]),
+  );
+});
+
 test("reads user conditions from both command-line flags and NODE_OPTIONS", () => {
   expect(
     getImportConditions(

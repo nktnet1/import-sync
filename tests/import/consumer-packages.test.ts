@@ -510,3 +510,67 @@ console.log(JSON.stringify(result));\n`,
     });
   },
 );
+
+testIsolatedConsumers(
+  "preserves real startup conditions when a %s consumer changes flags before loading the library",
+  "import-sync-late-startup-conditions-",
+  (root, extension) => {
+    writeIsolatedPackage(
+      root,
+      "late-startup-conditions",
+      {
+        name: "late-startup-conditions",
+        type: "module",
+        exports: {
+          import: {
+            startup: "./startup.mjs",
+            runtime: "./runtime.mjs",
+            default: "./default.mjs",
+          },
+        },
+      },
+      {
+        "startup.mjs": 'export const value = "startup";\n',
+        "runtime.mjs": 'export const value = "runtime";\n',
+        "default.mjs": 'export const value = "default";\n',
+      },
+    );
+
+    const consumer = join(root, `consumer.${extension}`);
+    const loadLibrary =
+      extension === "mjs"
+        ? `const { default: importSync } = await import(${JSON.stringify(pathToFileURL(libraryPath).href)});`
+        : `const importSync = require(${JSON.stringify(libraryPath)});`;
+    writeFileSync(
+      consumer,
+      `(async () => {
+  // Change both public flag carriers before importing import-sync itself.
+  process.env.NODE_OPTIONS = "--conditions=runtime";
+  process.execArgv.splice(0, process.execArgv.length, "--conditions=runtime");
+  ${loadLibrary}
+  const native = (await import("late-startup-conditions")).value;
+  const wrapper = importSync("late-startup-conditions").value;
+  console.log(JSON.stringify({ native, wrapper }));
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+    );
+
+    for (const { flags, nodeOptions, expected } of [
+      { flags: [], nodeOptions: "", expected: "default" },
+      {
+        flags: ["--conditions=startup"],
+        nodeOptions: "",
+        expected: "startup",
+      },
+      {
+        flags: [],
+        nodeOptions: "--conditions=startup",
+        expected: "startup",
+      },
+    ]) {
+      expect(
+        JSON.parse(runConsumer(consumer, root, { flags, nodeOptions })),
+      ).toEqual({ native: expected, wrapper: expected });
+    }
+  },
+);

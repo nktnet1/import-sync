@@ -1,3 +1,5 @@
+import { createRequire, registerHooks } from "node:module";
+
 /**
  * Native `require.resolve` uses CommonJS conditions by default. For a package
  * that publishes only an `import` entry, let Node resolve that condition instead
@@ -93,10 +95,43 @@ export const getImportConditions = (
   return conditions;
 };
 
-// Node fixes its resolution conditions at process startup. Mutating NODE_OPTIONS
-// or process.execArgv later (for example, for a child process) must not change
-// which conditional exports importSync selects in this process.
-const startupImportConditions = getImportConditions();
+/**
+ * Observe Node's actual process-start conditions through its native resolver.
+ * Applications may edit NODE_OPTIONS or process.execArgv before importing us;
+ * the resolver's condition list is not affected by those edits. The synchronous
+ * hook API is available on Node 22.15+; older runtimes retain flag parsing.
+ */
+const readStartupImportConditions = (): Set<string> => {
+  /* v8 ignore next -- @preserve: compatibility with Node before registerHooks. */
+  if (typeof registerHooks !== "function") return getImportConditions();
+
+  const captured: { conditions?: readonly string[] } = {};
+  const hook = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      captured.conditions = [...context.conditions];
+      return nextResolve(specifier, context);
+    },
+  });
+  try {
+    // A built-in is side-effect-free and does not depend on the caller's path.
+    createRequire(process.execPath)("node:os");
+  } finally {
+    hook.deregister();
+  }
+  /* v8 ignore next 2 -- @preserve: the native built-in resolution always invokes the hook. */
+  if (!captured.conditions)
+    throw new Error("Unable to determine native module conditions");
+
+  // The native `require` and `import` conditions differ only by their names.
+  return new Set([
+    ...captured.conditions.filter((condition) => condition !== "require"),
+    "import",
+    "default",
+  ]);
+};
+
+// Snapshot the real process-start conditions, not mutable runtime flags.
+const startupImportConditions = readStartupImportConditions();
 
 /** Prefer the existing require entry point; fall back only for missing conditions. */
 export const resolvePackageId = (
