@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import importSync from "../../src";
+import importSync from "#/index.ts";
 
 const basic = importSync("./basic.mjs");
 

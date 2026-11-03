@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
@@ -21,3 +22,37 @@ test("every declared package entry points to a built file", () => {
     }
   }
 });
+
+test("maps private #/ specifiers to source files", () => {
+  const pkg = JSON.parse(
+    readFileSync(resolve(projectRoot, "package.json"), "utf8"),
+  ) as { imports: Record<string, string> };
+  expect(pkg.imports).toEqual({ "#/*": "./src/*" });
+});
+
+// Node 22 rejects #/ specifiers; the published CommonJS bundle does not use
+// these source-only imports and remains compatible with Node 22.
+test.skipIf(Number(process.versions.node.split(".")[0]) < 24)(
+  "natively resolves and loads #/ imports inside the package",
+  () => {
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        'import { VALID_FILE_EXTENSIONS } from "#/config.ts"; console.log(JSON.stringify({ source: import.meta.resolve("#/config.ts"), extensions: VALID_FILE_EXTENSIONS }));',
+      ],
+      { cwd: projectRoot, encoding: "utf8", timeout: 8_000 },
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.status, child.stderr).toBe(0);
+    const result = JSON.parse(child.stdout.trim()) as {
+      source: string;
+      extensions: string[];
+    };
+    expect(realpathSync(fileURLToPath(result.source))).toBe(
+      realpathSync(resolve(projectRoot, "src/config.ts")),
+    );
+    expect(result.extensions).toEqual([".js", ".mjs", ".cjs", ".ts"]);
+  },
+);

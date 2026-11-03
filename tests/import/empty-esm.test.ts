@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import importSync from "../../src";
+import importSync from "#/index.ts";
 
 test("does not run a successfully imported module with no exports twice", () => {
   const root = realpathSync(

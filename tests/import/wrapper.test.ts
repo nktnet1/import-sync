@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("esm-sync", () => ({ default: mocks.factory }));
 
-import importSync from "../../src/import";
+import importSync from "#/import.ts";
 
 const basicDirectory = realpathSync(
   fileURLToPath(new URL("../basic/", import.meta.url)),

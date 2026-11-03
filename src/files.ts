@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { VALID_FILE_EXTENSIONS } from "./config";
+import { VALID_FILE_EXTENSIONS } from "#/config.ts";
 
 type CallSite = {
   getFileName(): string | null;

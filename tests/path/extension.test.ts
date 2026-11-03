@@ -8,7 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { findModuleFile, isRelativePath } from "../../src/files";
+import { findModuleFile, isRelativePath } from "#/files.ts";
 
 test("uses the documented extension precedence and prefers exact files", () => {
   const root = realpathSync(

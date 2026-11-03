@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import importSync from "../../src";
-import { getCallerDirname } from "../../src/files";
+import { getCallerDirname } from "#/files.ts";
+import importSync from "#/index.ts";
 
 const libraryPath = fs.realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),

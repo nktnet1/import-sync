@@ -8,7 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import importSync from "../../src";
+import importSync from "#/index.ts";
 
 test("loads a relative directory using its package entry point", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "import-sync-dir-")));

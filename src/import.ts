@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { types } from "node:util";
 import esm from "esm-sync";
 
-import { findModuleFile, getCallerDirname, isRelativePath } from "./files";
-import { Options } from "./options";
+import { findModuleFile, getCallerDirname, isRelativePath } from "#/files.ts";
+import { Options } from "#/options.ts";
 
 /**
  * Returns an ESM-imported module

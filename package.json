@@ -68,5 +68,8 @@
   "exports": {
     ".": "./dist/index.cjs",
     "./package.json": "./package.json"
+  },
+  "imports": {
+    "#/*": "./src/*"
   }
 }

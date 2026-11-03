@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import importSync from "../../src";
+import importSync from "#/index.ts";
 
 test("ESM import with default relative path", () => {
   const exampleMjs = importSync("../basic/basic");
