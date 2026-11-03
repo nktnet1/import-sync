@@ -43,7 +43,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build and test library
-        run: pnpm test --exclude "tests/tooling/**"
+        run: pnpm test
 
   tooling:
     name: Tooling, release, coverage and registry / Ubuntu / Node 24
