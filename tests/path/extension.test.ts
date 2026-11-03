@@ -1,4 +1,10 @@
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -36,6 +42,21 @@ test("reports the attempted path and extensions when nothing matches", () => {
     expect(() => findModuleFile(root, "./missing")).toThrow(
       `No such file '${join(root, "missing")}' with matching extensions [.js,.mjs,.cjs,.ts]`,
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ignores directories that look like extension matches", () => {
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "import-sync-extension-directory-")),
+  );
+  try {
+    const file = join(root, "module");
+    mkdirSync(`${file}.js`);
+    writeFileSync(`${file}.mjs`, "");
+
+    expect(findModuleFile(root, "./module")).toBe(`${file}.mjs`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

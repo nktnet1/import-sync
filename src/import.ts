@@ -17,21 +17,32 @@ const esmImport = (modulePath: string, options: Options) => {
   } catch (error: unknown) {
     /* v8 ignore next -- @preserve */
     const message = error instanceof Error ? error.stack : error;
+    let serializedOptions: string;
+    try {
+      serializedOptions = JSON.stringify(options);
+    } catch {
+      serializedOptions = "[unserializable options]";
+    }
     throw new Error(
       `
 Failed to import from:
   ${modulePath}
 Options:
-  ${JSON.stringify(options)}
+  ${serializedOptions}
 Require error message:
   ${message}`,
     );
   }
 };
 
-/** Whether a loader result resembles an empty namespace or plain object. */
+/** Whether an empty, extensible object may need a CommonJS fallback. */
 const isEmptyObject = (value: unknown): boolean => {
   if (value === null || typeof value !== "object") {
+    return false;
+  }
+  // Successfully loaded ESM namespaces are non-extensible. Loading them again
+  // through native require would evaluate their side effects twice.
+  if (!Object.isExtensible(value)) {
     return false;
   }
   const prototype = Object.getPrototypeOf(value);

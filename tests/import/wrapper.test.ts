@@ -97,6 +97,11 @@ test.each([
 test.each([
   { description: "an empty array", value: [] },
   { description: "a Date instance", value: new Date(0) },
+  { description: "a frozen empty object", value: Object.freeze({}) },
+  {
+    description: "a frozen null-prototype object",
+    value: Object.freeze(Object.create(null)),
+  },
 ])("preserves $description instead of falling back to require", ({ value }) => {
   mocks.load.mockReturnValue(value);
 
@@ -182,5 +187,19 @@ test("wraps non-Error loader failures", () => {
 
   expect(() => importSync("example-package")).toThrow(
     /Failed to import from:[\s\S]*non-Error failure/,
+  );
+});
+
+test("preserves import diagnostics even when options cannot be JSON serialized", () => {
+  const options: { basePath: string; circular?: unknown } = {
+    basePath: "/unused",
+  };
+  options.circular = options;
+  mocks.load.mockImplementation(() => {
+    throw new Error("original loader failure");
+  });
+
+  expect(() => importSync("example-package", options)).toThrow(
+    /Failed to import from:[\s\S]*example-package[\s\S]*\[unserializable options\][\s\S]*original loader failure/,
   );
 });

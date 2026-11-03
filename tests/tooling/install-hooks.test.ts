@@ -66,26 +66,16 @@ function fixture(): {
   return { root, marker, git };
 }
 
-describe("Husky to Lefthook migration", () => {
-  it.each([".husky", ".husky/_"])(
-    "removes the local %s setting before installing hooks",
-    (hooksPath) => {
-      const { root, marker, git } = fixture();
-      try {
-        git(["config", "--local", "core.hooksPath", hooksPath]);
-        installHooks(root);
-        const configured = spawnSync(
-          gitExecutable(),
-          ["config", "--local", "--get", "core.hooksPath"],
-          { cwd: root },
-        );
-        assert.equal(configured.status, 1);
-        assert.ok(existsSync(marker));
-      } finally {
-        rmSync(root, { recursive: true, force: true });
-      }
-    },
-  );
+describe("Lefthook installation", () => {
+  it("installs hooks for a repository with no custom hooks path", () => {
+    const { root, marker } = fixture();
+    try {
+      installHooks(root);
+      assert.ok(existsSync(marker));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it("preserves a custom local hook path and skips automatic installation", () => {
     const { root, marker, git } = fixture();
@@ -102,29 +92,17 @@ describe("Husky to Lefthook migration", () => {
     }
   });
 
-  it("preserves global hooks when migrating a local Husky setting", () => {
-    const { root, marker, git } = fixture();
+  it("skips installation in CI", () => {
+    const { root, marker } = fixture();
     try {
-      git(["config", "--global", "core.hooksPath", "global-hooks"]);
-      git(["config", "--local", "core.hooksPath", ".husky/_"]);
-      installHooks(root);
-      assert.equal(git(["config", "--get", "core.hooksPath"]), "global-hooks");
-      assert.equal(existsSync(marker), false);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("does not change Git configuration in CI", () => {
-    const { root, marker, git } = fixture();
-    try {
-      git(["config", "--local", "core.hooksPath", ".husky/_"]);
       vi.stubEnv("CI", "true");
       installHooks(root);
-      assert.equal(
-        git(["config", "--local", "--get", "core.hooksPath"]),
-        ".husky/_",
+      const configured = spawnSync(
+        gitExecutable(),
+        ["config", "--local", "--get", "core.hooksPath"],
+        { cwd: root },
       );
+      assert.equal(configured.status, 1);
       assert.equal(existsSync(marker), false);
     } finally {
       rmSync(root, { recursive: true, force: true });

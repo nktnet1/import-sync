@@ -59,7 +59,7 @@ export const getCallerDirname = (): string => {
 const findFileWithExtensions = (filePath: string): string => {
   for (const ext of VALID_FILE_EXTENSIONS) {
     const extFilePath = `${filePath}${ext}`;
-    if (fs.existsSync(extFilePath)) {
+    if (fs.statSync(extFilePath, { throwIfNoEntry: false })?.isFile()) {
       return extFilePath;
     }
   }
