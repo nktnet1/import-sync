@@ -1,9 +1,11 @@
 allowBuilds:
   "@parcel/watcher": false
-  # The root prepare script migrates Husky's core.hooksPath before installation.
+  esm-sync: true
   lefthook: false
   node-datachannel: true
   unrs-resolver: false
+minimumReleaseAgeExclude:
+  - esm-sync@3.5.0
 overrides:
   "@babel/helpers@<7.26.10": ^7.26.10
   brace-expansion@<2.0.2: ^2.0.2

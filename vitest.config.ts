@@ -6,6 +6,8 @@ export default defineConfig({
     maxWorkers: 1,
     include: ["**/*.test.{js,cjs,mjs,ts}"],
     exclude: [...configDefaults.exclude, "**/dist/**"],
+    fsModuleCache: true,
+    isolate: true,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

@@ -9,15 +9,18 @@ test("Broken file", () => {
   expect(() => importSync("./broken")).toThrow(Error);
 });
 
-test("Literal alias", () => {
+test("Literal aliases remain accessible from the module namespace", () => {
   expect(importSync("./literal-alias")).toMatchObject({
     myVar: 1531,
     default: 1531,
-    "module.exports": 1531,
     myVarAlias: 1531,
     "  __  :)  __  ": 1531,
     " 😆 ": 1531,
   });
+});
+
+test('The "module.exports" literal alias is returned directly', () => {
+  expect(importSync("./literal-module-exports")).toBe(1531);
 });
 
 test.each([

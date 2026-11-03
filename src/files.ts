@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { VALID_FILE_EXTENSIONS } from "./config";
 
 type CallSite = {
@@ -13,27 +14,38 @@ type CallSite = {
  * Implementation inspired by:
  * - https://www.npmjs.com/package/callsite?activeTab=code
  *
- * @returns {string} absolute path or an empty string if no caller
+ * @returns {string} absolute path of the caller's directory
+ * @throws {Error} if no caller file path is available
  */
-/* v8 ignore next 4 -- @preserve */
 export const getCallerDirname = (): string => {
-  const orig = Error.prepareStackTrace;
-  Error.prepareStackTrace = (_, stack) => stack;
-  const err = new Error("Capture caller stack trace");
-  Error.captureStackTrace(err, getCallerDirname);
-  const stack = err.stack as unknown as CallSite[];
-  Error.prepareStackTrace = orig;
+  const originalPrepareStackTrace = Error.prepareStackTrace;
+  const originalStackTraceLimit = Error.stackTraceLimit;
 
-  const callerFilePath = stack[1].getFileName() ?? stack[1]?.getEvalOrigin();
-  if (!callerFilePath) {
-    throw new Error("Unknown caller file path");
+  try {
+    // The caller is the second frame, even if the application limits stacks.
+    if (Error.stackTraceLimit < 2) {
+      Error.stackTraceLimit = 2;
+    }
+    Error.prepareStackTrace = (_, stack) => stack;
+    const err = new Error("Capture caller stack trace");
+    Error.captureStackTrace(err, getCallerDirname);
+    const stack = err.stack as unknown as CallSite[] | undefined;
+
+    const caller = stack?.[1];
+    const callerFilePath = caller?.getFileName() ?? caller?.getEvalOrigin();
+    if (!callerFilePath) {
+      throw new Error("Unknown caller file path");
+    }
+
+    return path.dirname(
+      callerFilePath.startsWith("file:")
+        ? fileURLToPath(callerFilePath)
+        : callerFilePath,
+    );
+  } finally {
+    Error.prepareStackTrace = originalPrepareStackTrace;
+    Error.stackTraceLimit = originalStackTraceLimit;
   }
-
-  return path.dirname(
-    callerFilePath.startsWith("file://")
-      ? callerFilePath.substring(7)
-      : callerFilePath,
-  );
 };
 
 /**
@@ -47,7 +59,7 @@ export const getCallerDirname = (): string => {
 const findFileWithExtensions = (filePath: string): string => {
   for (const ext of VALID_FILE_EXTENSIONS) {
     const extFilePath = `${filePath}${ext}`;
-    if (fs.existsSync(extFilePath)) {
+    if (fs.statSync(extFilePath, { throwIfNoEntry: false })?.isFile()) {
       return extFilePath;
     }
   }
