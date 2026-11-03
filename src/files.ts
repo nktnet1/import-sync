@@ -92,6 +92,17 @@ export const findModuleFile = (
   modulePath: string,
 ): string => {
   const filePath = path.resolve(basePath, modulePath);
+  // A trailing separator explicitly requests a directory. Resolving the
+  // path first removes the separator, which would otherwise allow a sibling
+  // file (or this file itself) to match an invalid directory specifier.
+  if ([path.sep, "/"].includes(modulePath.slice(-1))) {
+    if (fs.statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {
+      // The loader needs the separator too: without it, a sibling
+      // "directory.mjs" can take precedence over the directory's main file.
+      return `${filePath}${path.sep}`;
+    }
+    throw new MissingModuleFileError(`No directory found at '${filePath}'`);
+  }
   if (fs.statSync(filePath, { throwIfNoEntry: false })?.isFile()) {
     return filePath;
   }
