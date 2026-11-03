@@ -251,6 +251,12 @@ test("matches native ESM import conditions, including custom flags and built-ins
             import: {
               '"development"': "./double-quote.mjs",
               "'development'": "./single-quote.mjs",
+              'a"b': "./escaped-quote.mjs",
+              "a\\b": "./escaped-backslash.mjs",
+              "a b": "./escaped-space.mjs",
+              aqb: "./escaped-letter.mjs",
+              "a\\qb": "./literal-backslash.mjs",
+              ab: "./joined-quote.mjs",
               development: "./development.mjs",
               default: "./default.mjs",
             },
@@ -271,6 +277,12 @@ test("matches native ESM import conditions, including custom flags and built-ins
       "sync",
       "double-quote",
       "single-quote",
+      "escaped-quote",
+      "escaped-backslash",
+      "escaped-space",
+      "escaped-letter",
+      "literal-backslash",
+      "joined-quote",
     ]) {
       writeFileSync(
         join(packageRoot, `${name}.mjs`),
@@ -330,6 +342,36 @@ test("matches native ESM import conditions, including custom flags and built-ins
         flags: [],
         nodeOptions: '--conditions="development"',
         expected: ["development", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: String.raw`--conditions="a\"b"`,
+        expected: ["escaped-quote", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: String.raw`--conditions="a\\b"`,
+        expected: ["escaped-backslash", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: String.raw`--conditions="a\ b"`,
+        expected: ["escaped-space", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: String.raw`--conditions="a\qb"`,
+        expected: ["escaped-letter", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: String.raw`--conditions=a\qb`,
+        expected: ["literal-backslash", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: String.raw`--conditions="a""b"`,
+        expected: ["joined-quote", "addon", "sync"],
       },
       {
         flags: ["--no-addons"],

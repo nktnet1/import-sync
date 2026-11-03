@@ -17,10 +17,32 @@ export const getImportConditions = (
     conditions.add("module-sync");
   }
   // NODE_OPTIONS is processed before command-line flags by Node itself.
-  const envArgs =
-    nodeOptions
-      .match(/(?:[^\s"]+|"[^"]*")+/g)
-      ?.map((arg) => arg.replaceAll('"', "")) ?? [];
+  const envArgs: string[] = [];
+  let currentArg = "";
+  let inDoubleQuotes = false;
+  for (let index = 0; index < nodeOptions.length; index++) {
+    const character = nodeOptions[index];
+    if (character === '"') {
+      inDoubleQuotes = !inDoubleQuotes;
+    } else if (
+      inDoubleQuotes &&
+      character === "\\" &&
+      index + 1 < nodeOptions.length
+    ) {
+      // Node treats backslashes as escapes inside NODE_OPTIONS double quotes.
+      currentArg += nodeOptions[++index];
+    } else if (!inDoubleQuotes && /\s/.test(character)) {
+      if (currentArg) {
+        envArgs.push(currentArg);
+        currentArg = "";
+      }
+    } else {
+      currentArg += character;
+    }
+  }
+  if (currentArg) {
+    envArgs.push(currentArg);
+  }
   const args = [...envArgs, ...argv];
   let addonsEnabled = true;
 

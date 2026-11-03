@@ -24,7 +24,7 @@ test("reads user conditions from both command-line flags and NODE_OPTIONS", () =
   expect(
     getImportConditions(
       ["--conditions=cli", "-C", "short", "--conditions", "separate"],
-      '--conditions=env -C "quoted condition"',
+      '  --conditions=env   -C "quoted condition"  ',
     ),
   ).toEqual(
     new Set([
@@ -64,6 +64,30 @@ test("preserves literal quotes in CLI conditions but tokenizes NODE_OPTIONS doub
   }
   expect(conditions.has("literal")).toBe(false);
   expect(conditions.has("quoted cli")).toBe(false);
+});
+
+test("matches NODE_OPTIONS escaping within double-quoted conditions", () => {
+  const conditions = getImportConditions(
+    [],
+    String.raw`--conditions="a\"b" --conditions="a\\b" --conditions="a\ b" --conditions="a\qb" --conditions=a\qb --conditions="a""b"`,
+  );
+  for (const value of [
+    'a"b',
+    String.raw`a\b`,
+    "a b",
+    "aqb",
+    String.raw`a\qb`,
+    "ab",
+  ]) {
+    expect(conditions.has(value), value).toBe(true);
+  }
+  expect(conditions.has(String.raw`a\"b`)).toBe(false);
+  expect(conditions.has(String.raw`a\ b`)).toBe(false);
+  // Invalid NODE_OPTIONS never reaches Node user code, but this direct parser
+  // call should still preserve a trailing backslash rather than append undefined.
+  expect(
+    getImportConditions([], '--conditions="unfinished\\').has("unfinished\\"),
+  ).toBe(true);
 });
 
 test("respects the native addon toggle and ignores empty condition values", () => {
