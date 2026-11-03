@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { VALID_FILE_EXTENSIONS } from "#/config.ts";
 
 type CallSite = {
@@ -8,12 +8,17 @@ type CallSite = {
   getEvalOrigin(): string | null;
 };
 
+/** Dot-only paths name directories, regardless of platform. */
+const isDirectoryShorthand = (id: string): boolean => id === "." || id === "..";
+
 /** Whether an id is relative under the current platform's path syntax. */
 export const isRelativePath = (
   id: string,
   separator: string = path.sep,
 ): boolean =>
-  /^\.\.?\//.test(id) || (separator === "\\" && /^\.\.?\\/.test(id));
+  isDirectoryShorthand(id) ||
+  /^\.\.?\//.test(id) ||
+  (separator === "\\" && /^\.\.?\\/.test(id));
 
 /**
  * Get the file path of the caller function.
@@ -57,6 +62,8 @@ export const getCallerDirname = (): string => {
   }
 };
 
+class MissingModuleFileError extends Error {}
+
 /**
  * Find the module file path by checking for available extensions
  * as defined by VALID_FILE_EXTENSIONS
@@ -72,7 +79,7 @@ const findFileWithExtensions = (filePath: string): string => {
       return extFilePath;
     }
   }
-  throw new Error(
+  throw new MissingModuleFileError(
     `No such file '${filePath}' with matching extensions [${VALID_FILE_EXTENSIONS}]`,
   );
 };
@@ -90,6 +97,19 @@ export const findModuleFile = (
   modulePath: string,
 ): string => {
   const filePath = path.resolve(basePath, modulePath);
+  // Dot-only paths and trailing separators explicitly request directories.
+  // Preserve the separator so a sibling file cannot shadow the directory.
+  if (
+    isDirectoryShorthand(modulePath) ||
+    [path.sep, "/"].includes(modulePath.slice(-1))
+  ) {
+    if (fs.statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {
+      // The loader needs the separator too: without it, a sibling
+      // "directory.mjs" can take precedence over the directory's main file.
+      return `${filePath}${path.sep}`;
+    }
+    throw new MissingModuleFileError(`No directory found at '${filePath}'`);
+  }
   if (fs.statSync(filePath, { throwIfNoEntry: false })?.isFile()) {
     return filePath;
   }
@@ -102,4 +122,30 @@ export const findModuleFile = (
     }
     throw error;
   }
+};
+
+/**
+ * Resolve a relative specifier without changing support for literal filenames
+ * containing URL special characters. When literal lookup fails, also accept
+ * ESM-style percent encoding, search parameters and fragments.
+ */
+export const findRelativeModuleFile = (
+  basePath: string,
+  id: string,
+): string => {
+  try {
+    return findModuleFile(basePath, id);
+  } catch (error) {
+    if (!(error instanceof MissingModuleFileError) || !/[?#%]/.test(id)) {
+      throw error;
+    }
+  }
+
+  const baseURL = pathToFileURL(`${path.resolve(basePath)}${path.sep}`);
+  const specifierURL = new URL(id, baseURL);
+  const resolvedPath = findModuleFile(basePath, fileURLToPath(specifierURL));
+  // Preserve a bare "?" or "#": URL.search and URL.hash return "" for those.
+  const suffixStart = specifierURL.href.search(/[?#]/);
+  const suffix = suffixStart === -1 ? "" : specifierURL.href.slice(suffixStart);
+  return `${pathToFileURL(resolvedPath).href}${suffix}`;
 };

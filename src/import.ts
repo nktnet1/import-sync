@@ -1,11 +1,18 @@
+import { realpathSync } from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { types } from "node:util";
 import esm from "esm-sync";
 
-import { findModuleFile, getCallerDirname, isRelativePath } from "#/files.ts";
+import {
+  findModuleFile,
+  findRelativeModuleFile,
+  getCallerDirname,
+  isRelativePath,
+} from "#/files.ts";
 import { Options } from "#/options.ts";
+import { resolvePackageId } from "#/resolve.ts";
 
 /**
  * Returns an ESM-imported module
@@ -40,6 +47,9 @@ Require error message:
   }
 };
 
+/** URL schemes are case-insensitive, including file: URLs. */
+const isFileURL = (id: string): boolean => /^file:/i.test(id);
+
 /** Whether an empty, extensible object may need a CommonJS fallback. */
 const isEmptyObject = (value: unknown): boolean => {
   if (value === null || typeof value !== "object" || types.isProxy(value)) {
@@ -68,13 +78,25 @@ const isEmptyObject = (value: unknown): boolean => {
 const importSync = (id: string, options: Options = {}) => {
   let modulePath: string;
   if (isRelativePath(id)) {
-    modulePath = findModuleFile(options.basePath ?? getCallerDirname(), id);
-  } else if (path.isAbsolute(id) || id.startsWith("file:") || isBuiltin(id)) {
+    modulePath = findRelativeModuleFile(
+      options.basePath ?? getCallerDirname(),
+      id,
+    );
+  } else if (
+    path.isAbsolute(id) &&
+    path.extname(id) === "" &&
+    !/[?#]/.test(id)
+  ) {
+    // Match relative extension discovery for plain absolute filesystem paths.
+    modulePath = findModuleFile(".", id);
+  } else if (path.isAbsolute(id) || isFileURL(id) || isBuiltin(id)) {
     modulePath = id;
   } else {
-    modulePath = createRequire(
-      path.join(getCallerDirname(), "__import_sync__.cjs"),
-    ).resolve(id);
+    modulePath = resolvePackageId(
+      id,
+      createRequire(path.join(getCallerDirname(), "__import_sync__.cjs"))
+        .resolve,
+    );
   }
 
   const importedModule = esmImport(modulePath, options);
@@ -85,17 +107,30 @@ const importSync = (id: string, options: Options = {}) => {
   if (!isEmptyObject(importedModule)) {
     return importedModule;
   }
-  const filename = modulePath.startsWith("file:")
+  // A file URL with query/fragment can have a different loader identity than
+  // its filesystem path. Retrying it via native require would run it twice.
+  if (isFileURL(modulePath) && /[?#]/.test(modulePath)) {
+    return importedModule;
+  }
+  const filename = isFileURL(modulePath)
     ? fileURLToPath(modulePath)
     : modulePath;
-  if ([".mjs", ".mts"].includes(path.extname(filename))) {
+  let resolvedFilename = filename;
+  try {
+    // Directory entry points and symlinks can conceal an .mjs/.mts module.
+    // Native require of that module may execute it again after esm-sync did.
+    resolvedFilename = realpathSync(require.resolve(filename));
+  } catch {
+    // A bare built-in or a missing native resolution has no filesystem target.
+  }
+  if ([".mjs", ".mts"].includes(path.extname(resolvedFilename))) {
     return importedModule;
   }
 
   // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS in a test runner
   try {
     // biome-ignore lint/style/noCommonJs: allow CommonJS require fallback
-    const basicModule = require(modulePath);
+    const basicModule = require(filename);
     if (!isEmptyObject(basicModule)) {
       return basicModule;
     }

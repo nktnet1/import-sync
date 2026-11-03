@@ -3,4 +3,6 @@ export const VALID_FILE_EXTENSIONS = Object.freeze([
   ".mjs",
   ".cjs",
   ".ts",
+  ".mts",
+  ".cts",
 ]);

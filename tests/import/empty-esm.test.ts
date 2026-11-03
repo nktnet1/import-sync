@@ -1,15 +1,12 @@
-import {
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
 import importSync from "#/index.ts";
+import {
+  createPackageDirectory,
+  withTemporaryDirectory,
+} from "../helpers/fixtures.ts";
 
 function expectOnlyOneExecution(specifier: string, marker: string): void {
   const result = importSync(specifier);
@@ -20,10 +17,7 @@ function expectOnlyOneExecution(specifier: string, marker: string): void {
 }
 
 test("does not run a successfully imported module with no exports twice", () => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-empty-esm-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-empty-esm-", (root) => {
     const marker = join(root, "executions.txt");
     const fixture = join(root, "no-exports.mjs");
     writeFileSync(
@@ -32,9 +26,7 @@ test("does not run a successfully imported module with no exports twice", () => 
     );
 
     expectOnlyOneExecution(fixture, marker);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test.each([
@@ -49,10 +41,7 @@ test.each([
 ])(
   'does not execute an ESM "module.exports" empty object twice via $specifier',
   ({ specifier, exportValue }) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-empty-direct-esm-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-empty-direct-esm-", (root) => {
       const marker = join(root, "executions.txt");
       const fixture = join(root, "empty direct #%.mjs");
       writeFileSync(
@@ -67,8 +56,39 @@ test.each([
       }
 
       expectOnlyOneExecution(id, marker);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
 );
+
+// On Windows, creating symlinks requires privileges that CI runners may not have.
+test.skipIf(process.platform === "win32").each(["", ".cjs", ".js"])(
+  "does not execute an ESM module twice through a symlink with suffix %s",
+  (suffix) => {
+    withTemporaryDirectory("import-sync-symlink-esm-", (root) => {
+      const marker = join(root, "executions.txt");
+      const source = join(root, "source.mjs");
+      const alias = join(root, `alias${suffix}`);
+      writeFileSync(
+        source,
+        `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(marker)}, "x");\nconst value = {}; export { value as "module.exports" };\n`,
+      );
+      symlinkSync(source, alias, "file");
+
+      expectOnlyOneExecution(alias, marker);
+    });
+  },
+);
+
+test("does not execute an ESM directory package main twice", () => {
+  withTemporaryDirectory("import-sync-directory-esm-", (root) => {
+    const marker = join(root, "executions.txt");
+    const directory = createPackageDirectory(
+      root,
+      "package",
+      "entry.mjs",
+      `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(marker)}, "x");\nconst value = {}; export { value as "module.exports" };\n`,
+    );
+
+    expectOnlyOneExecution(directory, marker);
+  });
+});

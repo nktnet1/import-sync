@@ -1,8 +1,8 @@
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("esm-sync", () => ({ default: mocks.factory }));
 
 import importSync from "#/import.ts";
+import {
+  createPackageDirectory,
+  withTemporaryDirectory,
+} from "../helpers/fixtures.ts";
 
 const basicDirectory = realpathSync(
   fileURLToPath(new URL("../basic/", import.meta.url)),
@@ -30,6 +34,12 @@ function expectBasicModuleResolution(id: string): void {
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
     join(basicDirectory, "basic.mjs"),
   );
+}
+
+function expectNativeFallback(path: string): void {
+  const nativeResult = createRequire(import.meta.url)(path);
+  mocks.load.mockReturnValue({});
+  expect(importSync(path)).toBe(nativeResult);
 }
 
 test("resolves bare package IDs from the caller and forwards ESM options", () => {
@@ -76,6 +86,13 @@ test.each([
   {
     description: "a file URL",
     id: new URL("../basic/basic.mjs", import.meta.url).href,
+  },
+  {
+    description: "an uppercase file URL",
+    id: new URL("../basic/basic.mjs", import.meta.url).href.replace(
+      /^file:/,
+      "FILE:",
+    ),
   },
 ])("does not capture a caller stack for $description", ({ id }) => {
   const originalCaptureStackTrace = Error.captureStackTrace;
@@ -186,35 +203,65 @@ test.each([
   { name: "an empty array", source: "module.exports = [];" },
   { name: "a function", source: "module.exports = () => 42;" },
 ])("preserves $name from the native CommonJS fallback", ({ source }) => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-fallback-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-fallback-", (root) => {
     const fixture = join(root, "fixture.cjs");
     writeFileSync(fixture, source);
-    const nativeResult = createRequire(import.meta.url)(fixture);
-    mocks.load.mockReturnValue({});
+    expectNativeFallback(fixture);
+  });
+});
 
-    expect(importSync(fixture)).toBe(nativeResult);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+test.each([
+  { description: "file URL", uppercase: false, withQuery: false },
+  { description: "uppercase file URL", uppercase: true, withQuery: false },
+  {
+    description: "file URL with query and fragment",
+    uppercase: false,
+    withQuery: true,
+  },
+  {
+    description: "uppercase file URL with query and fragment",
+    uppercase: true,
+    withQuery: true,
+  },
+])(
+  "keeps the correct CommonJS fallback behaviour for a $description",
+  ({ uppercase, withQuery }) => {
+    withTemporaryDirectory("import-sync-fallback-url-", (root) => {
+      const fixture = join(root, "fixture #%.cjs");
+      writeFileSync(fixture, 'module.exports = { source: "native CJS" };');
+      const nativeResult = createRequire(import.meta.url)(fixture);
+      const url = pathToFileURL(fixture).href;
+      const id = `${uppercase ? url.replace(/^file:/, "FILE:") : url}${withQuery ? "?v=1#entry" : ""}`;
+      const loaderValue = {};
+      mocks.load.mockReturnValue(loaderValue);
+
+      expect(importSync(id)).toBe(withQuery ? loaderValue : nativeResult);
+      expect(mocks.load).toHaveBeenCalledExactlyOnceWith(id);
+    });
+  },
+);
+
+test("uses the native CommonJS fallback for directory package entries", () => {
+  withTemporaryDirectory("import-sync-fallback-directory-", (root) => {
+    const directory = createPackageDirectory(
+      root,
+      "fixture",
+      "entry.cjs",
+      'module.exports = { source: "native CJS directory" };',
+    );
+    expectNativeFallback(directory);
+  });
 });
 
 test("keeps the original namespace if the native fallback is also empty", () => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-fallback-empty-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-fallback-empty-", (root) => {
     const fixture = join(root, "fixture.cjs");
     writeFileSync(fixture, "module.exports = {};");
     const namespace = {};
     mocks.load.mockReturnValue(namespace);
 
     expect(importSync(fixture)).toBe(namespace);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test("returns the original empty result if the CommonJS fallback fails", () => {
