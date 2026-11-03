@@ -11,8 +11,8 @@ import { Options } from "./options";
  * @returns the esm imported module
  */
 const esmImport = (modulePath: string, options: Options) => {
-  const esmRequire = esm(module, options.esmOptions);
   try {
+    const esmRequire = esm(module, options.esmOptions);
     return esmRequire(modulePath);
   } catch (error: unknown) {
     /* v8 ignore next -- @preserve */
@@ -29,6 +29,16 @@ Require error message:
   }
 };
 
+/** Whether a loader result resembles an empty namespace or plain object. */
+const isEmptyObject = (value: unknown): boolean => {
+  if (value === null || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return (
+    (prototype === Object.prototype || prototype === null) &&
+    Object.keys(value).length === 0
+  );
+};
+
 /**
  * Imports ES6 modules synchronously similar to require in CommonJS
  * Can be used in both ES6 and CommonJS projects
@@ -42,17 +52,15 @@ const importSync = (id: string, options: Options = {}) => {
   const modulePath = /^\.\.?\//.test(id) ? findModuleFile(basePath, id) : id;
   const importedModule = esmImport(modulePath, options);
 
-  if (Object.keys(importedModule).length > 0) {
-    return importedModule;
-  }
+  // Only empty plain objects or module namespaces need the CommonJS fallback.
+  // Preserve direct exports such as null, functions, arrays and class instances.
+  if (!isEmptyObject(importedModule)) return importedModule;
+
   // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS in a test runner
   try {
     // biome-ignore lint/style/noCommonJs: allow CommonJS require fallback
     const basicModule = require(modulePath);
-    /* v8 ignore next -- @preserve */
-    if (Object.keys(basicModule).length > 0) {
-      return basicModule;
-    }
+    if (!isEmptyObject(basicModule)) return basicModule;
   } catch (_error) {
     /* nothing to do */
   }
