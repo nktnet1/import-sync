@@ -58,6 +58,7 @@ test("treats an explicit trailing slash as a directory, even when a file shadows
     expect(importSync("./fixture/", { basePath: root }).source).toBe(
       "directory entry",
     );
+    expect(importSync(join(root, "fixture/")).source).toBe("directory entry");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -208,7 +208,7 @@ test.each([
 });
 
 test.each(["file URL", "file URL with query and fragment"])(
-  "uses a filesystem path for the native CommonJS fallback from a %s",
+  "keeps the correct CommonJS fallback behaviour for a %s",
   (description) => {
     const root = realpathSync(
       mkdtempSync(join(tmpdir(), "import-sync-fallback-url-")),
@@ -219,9 +219,12 @@ test.each(["file URL", "file URL with query and fragment"])(
       const nativeResult = createRequire(import.meta.url)(fixture);
       const url = pathToFileURL(fixture).href;
       const id = description === "file URL" ? url : `${url}?v=1#entry`;
-      mocks.load.mockReturnValue({});
+      const loaderValue = {};
+      mocks.load.mockReturnValue(loaderValue);
 
-      expect(importSync(id)).toBe(nativeResult);
+      expect(importSync(id)).toBe(
+        description === "file URL" ? nativeResult : loaderValue,
+      );
       expect(mocks.load).toHaveBeenCalledExactlyOnceWith(id);
     } finally {
       rmSync(root, { recursive: true, force: true });

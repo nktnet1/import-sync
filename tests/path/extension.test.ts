@@ -47,6 +47,7 @@ test("reports the attempted path and extensions when nothing matches", () => {
 });
 
 test.each([
+  { extension: ".ts", source: "export const value = 42;" },
   { extension: ".mts", source: "export const value = 42;" },
   { extension: ".cts", source: "module.exports = { value: 42 };" },
 ])(
@@ -61,6 +62,7 @@ test.each([
       expect(importSync("./entry", { basePath: root })).toMatchObject({
         value: 42,
       });
+      expect(importSync(join(root, "entry"))).toMatchObject({ value: 42 });
       expect(
         importSync(`./entry${extension}`, { basePath: root }),
       ).toMatchObject({ value: 42 });

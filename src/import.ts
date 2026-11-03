@@ -6,6 +6,7 @@ import { types } from "node:util";
 import esm from "esm-sync";
 
 import {
+  findModuleFile,
   findRelativeModuleFile,
   getCallerDirname,
   isRelativePath,
@@ -78,6 +79,13 @@ const importSync = (id: string, options: Options = {}) => {
       options.basePath ?? getCallerDirname(),
       id,
     );
+  } else if (
+    path.isAbsolute(id) &&
+    path.extname(id) === "" &&
+    !/[?#]/.test(id)
+  ) {
+    // Match relative extension discovery for plain absolute filesystem paths.
+    modulePath = findModuleFile(".", id);
   } else if (path.isAbsolute(id) || id.startsWith("file:") || isBuiltin(id)) {
     modulePath = id;
   } else {
@@ -94,6 +102,11 @@ const importSync = (id: string, options: Options = {}) => {
   // deliberately export an empty object under the "module.exports" name; a
   // second native require would evaluate its side effects again.
   if (!isEmptyObject(importedModule)) {
+    return importedModule;
+  }
+  // A file URL with query/fragment can have a different loader identity than
+  // its filesystem path. Retrying it via native require would run it twice.
+  if (modulePath.startsWith("file:") && /[?#]/.test(modulePath)) {
     return importedModule;
   }
   const filename = modulePath.startsWith("file:")
