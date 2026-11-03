@@ -25,6 +25,10 @@ const evalOriginFilename = (origin: string): string | undefined => {
 /** Dot-only paths name directories, regardless of platform. */
 const isDirectoryShorthand = (id: string): boolean => id === "." || id === "..";
 
+/** A final dot segment explicitly requests a directory, even without a slash. */
+const endsInDirectoryShorthand = (id: string): boolean =>
+  isDirectoryShorthand(path.basename(id));
+
 /** Whether an id is relative under the current platform's path syntax. */
 export const isRelativePath = (
   id: string,
@@ -114,10 +118,10 @@ export const findModuleFile = (
   modulePath: string,
 ): string => {
   const filePath = path.resolve(basePath, modulePath);
-  // Dot-only paths and trailing separators explicitly request directories.
+  // Final dot segments and trailing separators explicitly request directories.
   // Preserve the separator so a sibling file cannot shadow the directory.
   if (
-    isDirectoryShorthand(modulePath) ||
+    endsInDirectoryShorthand(modulePath) ||
     [path.sep, "/"].includes(modulePath.slice(-1))
   ) {
     if (fs.statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {

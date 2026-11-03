@@ -82,3 +82,30 @@ test.each([
     });
   },
 );
+
+test("resolves directory paths ending in dot segments before extension discovery", () => {
+  withTemporaryDirectory("import-sync-directory-dot-segments-", (root) => {
+    const directory = createDirectoryPackage(root, "fixture", "directory");
+    mkdirSync(join(directory, "nested"));
+    writeFileSync(
+      join(root, "fixture.mjs"),
+      'export const source = "sibling";\n',
+    );
+
+    for (const specifier of [
+      "./.",
+      "././.",
+      "./nested/..",
+      "./nested/../.",
+      "../fixture/.",
+    ]) {
+      expect(importSync(specifier, { basePath: directory }).source).toBe(
+        "directory",
+      );
+    }
+
+    for (const absolute of [`${directory}/.`, `${directory}/nested/..`]) {
+      expect(importSync(absolute).source).toBe("directory");
+    }
+  });
+});
