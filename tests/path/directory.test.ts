@@ -10,19 +10,28 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import importSync from "#/index.ts";
 
+const createDirectoryPackage = (
+  root: string,
+  name: string,
+  source: string,
+): string => {
+  const directory = join(root, name);
+  mkdirSync(directory);
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ main: "./entry.mjs" }),
+  );
+  writeFileSync(
+    join(directory, "entry.mjs"),
+    `export const source = ${JSON.stringify(source)};\n`,
+  );
+  return directory;
+};
+
 test("loads a relative directory using its package entry point", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "import-sync-dir-")));
   try {
-    const directory = join(root, "fixture");
-    mkdirSync(directory);
-    writeFileSync(
-      join(directory, "package.json"),
-      JSON.stringify({ main: "./entry.mjs" }),
-    );
-    writeFileSync(
-      join(directory, "entry.mjs"),
-      'export const source = "directory package";\n',
-    );
+    createDirectoryPackage(root, "fixture", "directory package");
 
     expect(importSync("./fixture", { basePath: root }).source).toBe(
       "directory package",
@@ -37,16 +46,7 @@ test("treats an explicit trailing slash as a directory, even when a file shadows
     mkdtempSync(join(tmpdir(), "import-sync-dir-trailing-")),
   );
   try {
-    const directory = join(root, "fixture");
-    mkdirSync(directory);
-    writeFileSync(
-      join(directory, "package.json"),
-      JSON.stringify({ main: "./entry.mjs" }),
-    );
-    writeFileSync(
-      join(directory, "entry.mjs"),
-      'export const source = "directory entry";\n',
-    );
+    createDirectoryPackage(root, "fixture", "directory entry");
     writeFileSync(
       join(root, "fixture.mjs"),
       'export const source = "sibling file";\n',
@@ -76,6 +76,33 @@ test.each(["./entry.mjs/", "./entry/"])(
       expect(() => importSync(specifier, { basePath: root })).toThrow(
         /directory/i,
       );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test.each([
+  { specifier: ".", nesting: false },
+  { specifier: "..", nesting: true },
+])(
+  "resolves directory shorthand $specifier against basePath, never a sibling module",
+  ({ specifier, nesting }) => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "import-sync-directory-shorthand-")),
+    );
+    try {
+      const directory = createDirectoryPackage(root, "fixture", "directory");
+      writeFileSync(
+        join(root, "fixture.mjs"),
+        'export const source = "sibling";\n',
+      );
+      if (nesting) {
+        mkdirSync(join(directory, "nested"));
+      }
+      const basePath = nesting ? join(directory, "nested") : directory;
+
+      expect(importSync(specifier, { basePath }).source).toBe("directory");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

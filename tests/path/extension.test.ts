@@ -115,6 +115,10 @@ test("still accepts an existing directory when no file matches", () => {
 });
 
 test.each([
+  { id: ".", separator: "/", expected: true },
+  { id: "..", separator: "/", expected: true },
+  { id: ".", separator: "\\", expected: true },
+  { id: "..", separator: "\\", expected: true },
   { id: "./fixture", separator: "/", expected: true },
   { id: "../fixture", separator: "/", expected: true },
   { id: String.raw`.\fixture`, separator: "/", expected: false },

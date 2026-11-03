@@ -437,3 +437,52 @@ test("matches native ESM import conditions, including custom flags and built-ins
     rmSync(root, { recursive: true, force: true });
   }
 }, 45_000);
+
+test.each(["cjs", "mjs"])(
+  "resolves . and .. from actual %s consumer directories",
+  (extension) => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "import-sync-dir-consumer-")),
+    );
+    try {
+      const project = join(root, "project");
+      const nested = join(project, "nested");
+      mkdirSync(nested, { recursive: true });
+      for (const [directory, source] of [
+        [project, "parent"],
+        [nested, "current"],
+      ] as const) {
+        writeFileSync(
+          join(directory, "package.json"),
+          JSON.stringify({ type: "module", main: "./entry.mjs" }),
+        );
+        writeFileSync(
+          join(directory, "entry.mjs"),
+          `export const source = ${JSON.stringify(source)};\n`,
+        );
+      }
+      writeFileSync(
+        join(project, "nested.mjs"),
+        'export const source = "wrong sibling";\n',
+      );
+      const consumer = join(nested, `consumer.${extension}`);
+      writeFileSync(
+        consumer,
+        `${libraryImport(extension)}const result = {
+  current: importSync(".").source,
+  parent: importSync("..").source,
+  explicit: importSync(".", { basePath: ${JSON.stringify(project)} }).source,
+};
+console.log(JSON.stringify(result));\n`,
+      );
+      expect(JSON.parse(runConsumer(consumer, root))).toEqual({
+        current: "current",
+        parent: "parent",
+        explicit: "parent",
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+  12_000,
+);
