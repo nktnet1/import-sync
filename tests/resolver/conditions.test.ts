@@ -9,7 +9,55 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { resolvePackageId } from "#/resolve.ts";
+import { getImportConditions, resolvePackageId } from "#/resolve.ts";
+
+test("recreates Node's built-in import conditions", () => {
+  expect(getImportConditions([], "")).toEqual(
+    new Set(["node", "import", "default", "module-sync", "node-addons"]),
+  );
+  expect(getImportConditions([], "", false)).toEqual(
+    new Set(["node", "import", "default", "node-addons"]),
+  );
+});
+
+test("reads user conditions from both command-line flags and NODE_OPTIONS", () => {
+  expect(
+    getImportConditions(
+      ["--conditions=cli", "-C", "short", "--conditions", "separate"],
+      '--conditions=env -C "quoted condition"',
+    ),
+  ).toEqual(
+    new Set([
+      "node",
+      "import",
+      "default",
+      "module-sync",
+      "node-addons",
+      "env",
+      "quoted condition",
+      "cli",
+      "short",
+      "separate",
+    ]),
+  );
+  expect(
+    getImportConditions([], '"--conditions=whole-argument"').has(
+      "whole-argument",
+    ),
+  ).toBe(true);
+});
+
+test("respects the native addon toggle and ignores empty condition values", () => {
+  const withoutAddons = getImportConditions(
+    ["--conditions=", "-C", "", "--addons", "--no-addons"],
+    "",
+  );
+  expect(withoutAddons.has("node-addons")).toBe(false);
+  expect(withoutAddons.has("")).toBe(false);
+  expect(
+    getImportConditions(["--no-addons", "--addons"], "").has("node-addons"),
+  ).toBe(true);
+});
 
 test("preserves the CommonJS resolution branch when it exists", () => {
   const resolve = vi.fn().mockReturnValue("/package/require.cjs");
@@ -42,6 +90,8 @@ test.each(["ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_PACKAGE_IMPORT_NOT_DEFINED"])(
     expect(conditions.has("node")).toBe(true);
     expect(conditions.has("import")).toBe(true);
     expect(conditions.has("default")).toBe(true);
+    expect(conditions.has("module-sync")).toBe(true);
+    expect(conditions.has("node-addons")).toBe(true);
     expect(conditions.has("require")).toBe(false);
   },
 );

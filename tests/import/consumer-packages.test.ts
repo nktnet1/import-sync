@@ -233,3 +233,97 @@ console.log(JSON.stringify(result));\n`,
   },
   12_000,
 );
+
+test("matches native ESM import conditions, including custom flags and built-ins", () => {
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "import-sync-native-conditions-")),
+  );
+  try {
+    const packageRoot = join(root, "node_modules", "conditional-library");
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(
+      join(packageRoot, "package.json"),
+      JSON.stringify({
+        name: "conditional-library",
+        type: "module",
+        exports: {
+          "./environment": {
+            import: {
+              development: "./development.mjs",
+              default: "./default.mjs",
+            },
+          },
+          "./addon": {
+            import: { "node-addons": "./addon.mjs", default: "./default.mjs" },
+          },
+          "./sync": {
+            import: { "module-sync": "./sync.mjs", default: "./default.mjs" },
+          },
+        },
+      }),
+    );
+    for (const name of ["development", "default", "addon", "sync"]) {
+      writeFileSync(
+        join(packageRoot, `${name}.mjs`),
+        `export const value = ${JSON.stringify(name)};\n`,
+      );
+    }
+
+    const consumerFile = join(root, "consumer.cjs");
+    writeFileSync(
+      consumerFile,
+      `${libraryImport("cjs")}(async () => {
+  const ids = ["environment", "addon", "sync"].map((name) => "conditional-library/" + name);
+  const native = await Promise.all(ids.map(async (id) => (await import(id)).value));
+  const actual = ids.map((id) => importSync(id).value);
+  console.log(JSON.stringify({ native, actual }));
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+    );
+
+    const cases = [
+      { flags: [], nodeOptions: "", expected: ["default", "addon", "sync"] },
+      {
+        flags: ["--conditions=development"],
+        nodeOptions: "",
+        expected: ["development", "addon", "sync"],
+      },
+      {
+        flags: ["-C", "development"],
+        nodeOptions: "",
+        expected: ["development", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: "--conditions=development",
+        expected: ["development", "addon", "sync"],
+      },
+      {
+        flags: ["--no-addons"],
+        nodeOptions: "",
+        expected: ["default", "default", "sync"],
+      },
+      {
+        flags: ["--no-experimental-require-module"],
+        nodeOptions: "",
+        expected: ["default", "addon", "default"],
+      },
+    ];
+
+    for (const { flags, nodeOptions, expected } of cases) {
+      const child = spawnSync(process.execPath, [...flags, consumerFile], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, NODE_OPTIONS: nodeOptions },
+        timeout: 8_000,
+      });
+      expect(child.error).toBeUndefined();
+      expect(child.status, child.stderr).toBe(0);
+      expect(JSON.parse(child.stdout.trim())).toEqual({
+        native: expected,
+        actual: expected,
+      });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 45_000);
