@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
 import { getCallerDirname } from "#/files.ts";
 import importSync from "#/index.ts";
+import { runConsumer } from "../helpers/consumer.ts";
 import { withTemporaryDirectory } from "../helpers/fixtures.ts";
 
 const libraryPath = fs.realpathSync(
@@ -135,13 +135,10 @@ test.each(["cjs", "mjs"])(
         consumer,
         `${prefix}\nconsole.log(JSON.stringify([eval(${JSON.stringify(expression)}), eval(${JSON.stringify(nestedExpression)})]));\n`,
       );
-      const result = spawnSync(process.execPath, [consumer], {
-        encoding: "utf8",
-        timeout: 8_000,
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.status, result.stderr).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual(["from eval", "from eval"]);
+      expect(JSON.parse(runConsumer(consumer, root))).toEqual([
+        "from eval",
+        "from eval",
+      ]);
     });
   },
   12_000,
@@ -200,10 +197,7 @@ test("restores error stack hooks even if V8 stack capture throws", () => {
 test.each(["cjs", "mjs"])(
   "resolves imports from actual %s consumers in escaped directories",
   (extension) => {
-    const temporaryRoot = fs.realpathSync(
-      fs.mkdtempSync(path.join(os.tmpdir(), "import-sync-path-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-path-", (temporaryRoot) => {
       const directory = path.join(
         temporaryRoot,
         "space percent% hash# unicode-🍄",
@@ -221,15 +215,8 @@ test.each(["cjs", "mjs"])(
           ? `import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\n${common}`
           : common,
       );
-      const result = spawnSync(process.execPath, [caller], {
-        encoding: "utf8",
-        timeout: 8_000,
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.status, result.stderr).toBe(0);
-    } finally {
-      fs.rmSync(temporaryRoot, { force: true, recursive: true });
-    }
+      runConsumer(caller, temporaryRoot);
+    });
   },
   12_000,
 );
