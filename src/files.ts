@@ -23,7 +23,7 @@ export const getCallerDirname = (): string => {
 
   try {
     // The caller is the second frame, even if the application limits stacks.
-    if (!(Error.stackTraceLimit >= 2)) {
+    if (Error.stackTraceLimit < 2) {
       Error.stackTraceLimit = 2;
     }
     Error.prepareStackTrace = (_, stack) => stack;
