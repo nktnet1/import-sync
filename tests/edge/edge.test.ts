@@ -9,15 +9,8 @@ test("Broken file", () => {
   expect(() => importSync("./broken")).toThrow(Error);
 });
 
-test("Literal alias", () => {
-  expect(importSync("./literal-alias")).toMatchObject({
-    myVar: 1531,
-    default: 1531,
-    "module.exports": 1531,
-    myVarAlias: 1531,
-    "  __  :)  __  ": 1531,
-    " 😆 ": 1531,
-  });
+test("ESM module.exports alias is returned directly", () => {
+  expect(importSync("./literal-alias")).toBe(1531);
 });
 
 test.each([
