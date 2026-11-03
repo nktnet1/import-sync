@@ -2,7 +2,7 @@
 
 # [![Import Sync](logo.svg)](https://github.com/nktnet1/import-sync)
 
-[![pipeline](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yml/badge.svg)](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yml)
+[![pipeline](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yaml/badge.svg?branch=main)](https://github.com/nktnet1/import-sync/actions/workflows/pipeline.yaml)
 &nbsp;
 [![codecov](https://codecov.io/gh/nktnet1/import-sync/branch/main/graph/badge.svg?token=RAC7SKJTGU)](https://codecov.io/gh/nktnet1/import-sync)
 &nbsp;
@@ -12,7 +12,7 @@
 
 [![NPM Version](https://img.shields.io/npm/v/import-sync?logo=npm)](https://www.npmjs.com/package/import-sync?activeTab=versions)
 &nbsp;
-[![install size](https://packagephobia.com/badge?p=import-sync)](https://packagephobia.com/result?p=import-sync)
+[![install size](https://badgen.net/packagephobia/install/import-sync)](https://packagephobia.com/result?p=import-sync)
 &nbsp;
 [![Depfu Dependencies](https://badges.depfu.com/badges/6c4074c4d23ad57ee2bfd9ff90456090/overview.svg)](https://depfu.com/github/nktnet1/import-sync?project_id=39032)
 &nbsp;
