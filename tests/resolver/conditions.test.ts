@@ -9,7 +9,35 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { getImportConditions, resolvePackageId } from "#/resolve.ts";
+import {
+  deriveImportConditions,
+  getImportConditions,
+  resolvePackageId,
+} from "#/resolve.ts";
+
+test.each([
+  {
+    name: "the default native require conditions",
+    native: ["require", "node", "node-addons", "module-sync"],
+    explicitRequire: false,
+  },
+  {
+    name: "an explicit --conditions=require startup flag",
+    native: ["require", "node", "node-addons", "require", "module-sync"],
+    explicitRequire: true,
+  },
+])("converts $name to import conditions", ({ native, explicitRequire }) => {
+  expect(deriveImportConditions(native)).toEqual(
+    new Set([
+      "node",
+      "import",
+      "default",
+      "module-sync",
+      "node-addons",
+      ...(explicitRequire ? ["require"] : []),
+    ]),
+  );
+});
 
 test("recreates Node's built-in import conditions", () => {
   expect(getImportConditions([], "")).toEqual(

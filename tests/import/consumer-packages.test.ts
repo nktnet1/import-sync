@@ -523,6 +523,7 @@ testIsolatedConsumers(
         type: "module",
         exports: {
           import: {
+            require: "./require.mjs",
             startup: "./startup.mjs",
             runtime: "./runtime.mjs",
             default: "./default.mjs",
@@ -530,6 +531,7 @@ testIsolatedConsumers(
         },
       },
       {
+        "require.mjs": 'export const value = "require";\n',
         "startup.mjs": 'export const value = "startup";\n',
         "runtime.mjs": 'export const value = "runtime";\n',
         "default.mjs": 'export const value = "default";\n',
@@ -566,6 +568,16 @@ testIsolatedConsumers(
         flags: [],
         nodeOptions: "--conditions=startup",
         expected: "startup",
+      },
+      {
+        flags: ["--conditions=require"],
+        nodeOptions: "",
+        expected: "require",
+      },
+      {
+        flags: [],
+        nodeOptions: "--conditions=require",
+        expected: "require",
       },
     ]) {
       expect(

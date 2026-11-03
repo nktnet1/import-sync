@@ -95,6 +95,22 @@ export const getImportConditions = (
   return conditions;
 };
 
+/** Convert Node's require conditions to import conditions without losing explicit require flags. */
+export const deriveImportConditions = (
+  requireConditions: readonly string[],
+): Set<string> => {
+  const conditions = new Set(["import", "default"]);
+  let removedBuiltinRequire = false;
+  for (const condition of requireConditions) {
+    if (condition === "require" && !removedBuiltinRequire) {
+      removedBuiltinRequire = true;
+      continue;
+    }
+    conditions.add(condition);
+  }
+  return conditions;
+};
+
 /**
  * Observe Node's actual process-start conditions through its native resolver.
  * Applications may edit NODE_OPTIONS or process.execArgv before importing us;
@@ -122,12 +138,7 @@ const readStartupImportConditions = (): Set<string> => {
   if (!captured.conditions)
     throw new Error("Unable to determine native module conditions");
 
-  // The native `require` and `import` conditions differ only by their names.
-  return new Set([
-    ...captured.conditions.filter((condition) => condition !== "require"),
-    "import",
-    "default",
-  ]);
+  return deriveImportConditions(captured.conditions);
 };
 
 // Snapshot the real process-start conditions, not mutable runtime flags.
