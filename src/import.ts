@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -88,14 +89,22 @@ const importSync = (id: string, options: Options = {}) => {
   const filename = modulePath.startsWith("file:")
     ? fileURLToPath(modulePath)
     : modulePath;
-  if ([".mjs", ".mts"].includes(path.extname(filename))) {
+  let resolvedFilename = filename;
+  try {
+    // Directory entry points and symlinks can conceal an .mjs/.mts module.
+    // Native require of that module may execute it again after esm-sync did.
+    resolvedFilename = realpathSync(require.resolve(filename));
+  } catch {
+    // A bare built-in or a missing native resolution has no filesystem target.
+  }
+  if ([".mjs", ".mts"].includes(path.extname(resolvedFilename))) {
     return importedModule;
   }
 
   // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS in a test runner
   try {
     // biome-ignore lint/style/noCommonJs: allow CommonJS require fallback
-    const basicModule = require(modulePath);
+    const basicModule = require(filename);
     if (!isEmptyObject(basicModule)) {
       return basicModule;
     }

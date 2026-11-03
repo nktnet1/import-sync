@@ -1,8 +1,14 @@
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -196,6 +202,52 @@ test.each([
     mocks.load.mockReturnValue({});
 
     expect(importSync(fixture)).toBe(nativeResult);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.each(["file URL", "file URL with query and fragment"])(
+  "uses a filesystem path for the native CommonJS fallback from a %s",
+  (description) => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "import-sync-fallback-url-")),
+    );
+    try {
+      const fixture = join(root, "fixture #%.cjs");
+      writeFileSync(fixture, 'module.exports = { source: "native CJS" };');
+      const nativeResult = createRequire(import.meta.url)(fixture);
+      const url = pathToFileURL(fixture).href;
+      const id = description === "file URL" ? url : `${url}?v=1#entry`;
+      mocks.load.mockReturnValue({});
+
+      expect(importSync(id)).toBe(nativeResult);
+      expect(mocks.load).toHaveBeenCalledExactlyOnceWith(id);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test("uses the native CommonJS fallback for directory package entries", () => {
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "import-sync-fallback-directory-")),
+  );
+  try {
+    const directory = join(root, "fixture");
+    mkdirSync(directory);
+    writeFileSync(
+      join(directory, "package.json"),
+      JSON.stringify({ main: "./entry.cjs" }),
+    );
+    writeFileSync(
+      join(directory, "entry.cjs"),
+      'module.exports = { source: "native CJS directory" };',
+    );
+    const nativeResult = createRequire(import.meta.url)(directory);
+    mocks.load.mockReturnValue({});
+
+    expect(importSync(directory)).toBe(nativeResult);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

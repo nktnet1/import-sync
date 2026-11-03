@@ -1,8 +1,10 @@
 import {
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -72,3 +74,50 @@ test.each([
     }
   },
 );
+
+// On Windows, creating symlinks requires privileges that CI runners may not have.
+test.skipIf(process.platform === "win32").each(["", ".cjs", ".js"])(
+  "does not execute an ESM module twice through a symlink with suffix %s",
+  (suffix) => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "import-sync-symlink-esm-")),
+    );
+    try {
+      const marker = join(root, "executions.txt");
+      const source = join(root, "source.mjs");
+      const alias = join(root, `alias${suffix}`);
+      writeFileSync(
+        source,
+        `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(marker)}, "x");\nconst value = {}; export { value as "module.exports" };\n`,
+      );
+      symlinkSync(source, alias, "file");
+
+      expectOnlyOneExecution(alias, marker);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test("does not execute an ESM directory package main twice", () => {
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "import-sync-directory-esm-")),
+  );
+  try {
+    const marker = join(root, "executions.txt");
+    const directory = join(root, "package");
+    mkdirSync(directory);
+    writeFileSync(
+      join(directory, "package.json"),
+      JSON.stringify({ main: "./entry.mjs" }),
+    );
+    writeFileSync(
+      join(directory, "entry.mjs"),
+      `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(marker)}, "x");\nconst value = {}; export { value as "module.exports" };\n`,
+    );
+
+    expectOnlyOneExecution(directory, marker);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
