@@ -13,6 +13,10 @@ vi.mock("esm-sync", () => ({ default: mocks.factory }));
 
 import importSync from "../../src/import";
 
+const basicDirectory = realpathSync(
+  fileURLToPath(new URL("../basic/", import.meta.url)),
+);
+
 beforeEach(() => {
   mocks.load.mockReset();
   mocks.factory.mockReset().mockReturnValue(mocks.load);
@@ -80,9 +84,7 @@ test.each([
 });
 
 test("resolves extensionless paths against an explicit basePath", () => {
-  const basePath = realpathSync(
-    fileURLToPath(new URL("../basic/", import.meta.url)),
-  );
+  const basePath = basicDirectory;
   const value = { sentinel: true };
   mocks.load.mockReturnValue(value);
 
@@ -107,9 +109,7 @@ test("resolves relative basePath values from the working directory", () => {
 test.skipIf(process.platform !== "win32")(
   "recognises backslash-prefixed relative paths on Windows",
   () => {
-    const basePath = realpathSync(
-      fileURLToPath(new URL("../basic/", import.meta.url)),
-    );
+    const basePath = basicDirectory;
     const value = { sentinel: true };
     mocks.load.mockReturnValue(value);
 
@@ -158,6 +158,20 @@ test.each([
     value: Object.defineProperty({}, "hidden", { value: 42 }),
   },
 ])("preserves $description without a native require fallback", ({ value }) => {
+  mocks.load.mockReturnValue(value);
+
+  expect(importSync("node:fs")).toBe(value);
+});
+
+test("does not introspect a Proxy returned by the loader", () => {
+  const value = new Proxy(
+    {},
+    {
+      isExtensible: () => {
+        throw new Error("must not inspect an exported Proxy");
+      },
+    },
+  );
   mocks.load.mockReturnValue(value);
 
   expect(importSync("node:fs")).toBe(value);

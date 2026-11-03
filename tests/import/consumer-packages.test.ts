@@ -15,6 +15,17 @@ const libraryPath = realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
 );
 
+const runConsumer = (consumerFile: string, root: string): string => {
+  const child = spawnSync(process.execPath, [consumerFile], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 8_000,
+  });
+  expect(child.error).toBeUndefined();
+  expect(child.status, child.stderr).toBe(0);
+  return child.stdout.trim();
+};
+
 /** Test resolution from a separate application, not from the library's node_modules. */
 test.each(["cjs", "mjs"])(
   "imports packages belonging to an isolated %s consumer",
@@ -77,14 +88,7 @@ test.each(["cjs", "mjs"])(
 };
 console.log(JSON.stringify(result));\n`,
       );
-      const child = spawnSync(process.execPath, [consumerFile], {
-        cwd: root,
-        encoding: "utf8",
-        timeout: 8_000,
-      });
-      expect(child.error).toBeUndefined();
-      expect(child.status, child.stderr).toBe(0);
-      expect(JSON.parse(child.stdout)).toEqual({
+      expect(JSON.parse(runConsumer(consumerFile, root))).toEqual({
         package: 42,
         scoped: "scoped feature",
         internal: "caller package scope",
@@ -115,14 +119,7 @@ test("prefers the application's own installed package over the library's copy", 
       consumerFile,
       `const importSync = require(${JSON.stringify(libraryPath)});\nconsole.log(importSync("node-fetch").origin);\n`,
     );
-    const child = spawnSync(process.execPath, [consumerFile], {
-      cwd: root,
-      encoding: "utf8",
-      timeout: 8_000,
-    });
-    expect(child.error).toBeUndefined();
-    expect(child.status, child.stderr).toBe(0);
-    expect(child.stdout.trim()).toBe("consumer");
+    expect(runConsumer(consumerFile, root)).toBe("consumer");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
