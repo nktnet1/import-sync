@@ -53,6 +53,13 @@ test.skipIf(Number(process.versions.node.split(".")[0]) < 24)(
     expect(realpathSync(fileURLToPath(result.source))).toBe(
       realpathSync(resolve(projectRoot, "src/config.ts")),
     );
-    expect(result.extensions).toEqual([".js", ".mjs", ".cjs", ".ts"]);
+    expect(result.extensions).toEqual([
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".ts",
+      ".mts",
+      ".cts",
+    ]);
   },
 );

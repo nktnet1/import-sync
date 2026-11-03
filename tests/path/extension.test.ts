@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { findModuleFile, isRelativePath } from "#/files.ts";
+import importSync from "#/index.ts";
 
 test("uses the documented extension precedence and prefers exact files", () => {
   const root = realpathSync(
@@ -16,16 +17,14 @@ test("uses the documented extension precedence and prefers exact files", () => {
   );
   try {
     const file = join(root, "module");
-    for (const extension of [".js", ".mjs", ".cjs", ".ts"]) {
+    const extensions = [".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"];
+    for (const extension of extensions) {
       writeFileSync(`${file}${extension}`, "");
     }
-    expect(findModuleFile(root, "./module")).toBe(`${file}.js`);
-    rmSync(`${file}.js`);
-    expect(findModuleFile(root, "./module")).toBe(`${file}.mjs`);
-    rmSync(`${file}.mjs`);
-    expect(findModuleFile(root, "./module")).toBe(`${file}.cjs`);
-    rmSync(`${file}.cjs`);
-    expect(findModuleFile(root, "./module")).toBe(`${file}.ts`);
+    for (const extension of extensions) {
+      expect(findModuleFile(root, "./module")).toBe(`${file}${extension}`);
+      rmSync(`${file}${extension}`);
+    }
 
     writeFileSync(file, "");
     expect(findModuleFile(root, "./module")).toBe(file);
@@ -40,12 +39,36 @@ test("reports the attempted path and extensions when nothing matches", () => {
   );
   try {
     expect(() => findModuleFile(root, "./missing")).toThrow(
-      `No such file '${join(root, "missing")}' with matching extensions [.js,.mjs,.cjs,.ts]`,
+      `No such file '${join(root, "missing")}' with matching extensions [.js,.mjs,.cjs,.ts,.mts,.cts]`,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test.each([
+  { extension: ".mts", source: "export const value = 42;" },
+  { extension: ".cts", source: "module.exports = { value: 42 };" },
+])(
+  "loads JavaScript-syntax $extension files without an explicit extension",
+  ({ extension, source }) => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "import-sync-ts-ext-")),
+    );
+    try {
+      writeFileSync(join(root, `entry${extension}`), source);
+
+      expect(importSync("./entry", { basePath: root })).toMatchObject({
+        value: 42,
+      });
+      expect(
+        importSync(`./entry${extension}`, { basePath: root }),
+      ).toMatchObject({ value: 42 });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test("ignores directories that look like extension matches", () => {
   const root = realpathSync(

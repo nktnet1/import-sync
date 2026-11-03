@@ -135,7 +135,8 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
 - `'../animals/cats.js'`
 - `'./dogs.mjs'`
 - `'./minimal'`
-  -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs, .ts]`
+  -  `importSync` will look for matching extensions in the order `[.js, .mjs, .cjs, .ts, .mts, .cts]`
+  - `.ts`, `.mts`, and `.cts` are included in path discovery; support for TypeScript syntax depends on the underlying loader.
 - `'node-fetch'`
   - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) into your cjs project
 
