@@ -22,6 +22,16 @@ beforeEach(() => {
   mocks.factory.mockReset().mockReturnValue(mocks.load);
 });
 
+function expectBasicModuleResolution(id: string): void {
+  const value = { sentinel: true };
+  mocks.load.mockReturnValue(value);
+
+  expect(importSync(id, { basePath: basicDirectory })).toBe(value);
+  expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+    join(basicDirectory, "basic.mjs"),
+  );
+}
+
 test("resolves bare package IDs from the caller and forwards ESM options", () => {
   const esmOptions = { mode: "strict" } as const;
   const value = { sentinel: true };
@@ -84,14 +94,7 @@ test.each([
 });
 
 test("resolves extensionless paths against an explicit basePath", () => {
-  const basePath = basicDirectory;
-  const value = { sentinel: true };
-  mocks.load.mockReturnValue(value);
-
-  expect(importSync("./basic", { basePath })).toBe(value);
-  expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
-    join(basePath, "basic.mjs"),
-  );
+  expectBasicModuleResolution("./basic");
 });
 
 test("resolves relative basePath values from the working directory", () => {
@@ -109,14 +112,7 @@ test("resolves relative basePath values from the working directory", () => {
 test.skipIf(process.platform !== "win32")(
   "recognises backslash-prefixed relative paths on Windows",
   () => {
-    const basePath = basicDirectory;
-    const value = { sentinel: true };
-    mocks.load.mockReturnValue(value);
-
-    expect(importSync(String.raw`.\basic`, { basePath })).toBe(value);
-    expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
-      join(basePath, "basic.mjs"),
-    );
+    expectBasicModuleResolution(String.raw`.\basic`);
   },
 );
 

@@ -11,6 +11,14 @@ import { pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
 import importSync from "#/index.ts";
 
+function expectOnlyOneExecution(specifier: string, marker: string): void {
+  const result = importSync(specifier);
+
+  expect(Object.keys(result)).toEqual([]);
+  expect(importSync(specifier)).toBe(result);
+  expect(readFileSync(marker, "utf8")).toBe("x");
+}
+
 test("does not run a successfully imported module with no exports twice", () => {
   const root = realpathSync(
     mkdtempSync(join(tmpdir(), "import-sync-empty-esm-")),
@@ -23,11 +31,7 @@ test("does not run a successfully imported module with no exports twice", () => 
       `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(marker)}, "x");\n`,
     );
 
-    const result = importSync(fixture);
-
-    expect(Object.keys(result)).toEqual([]);
-    expect(importSync(fixture)).toBe(result);
-    expect(readFileSync(marker, "utf8")).toBe("x");
+    expectOnlyOneExecution(fixture, marker);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -62,11 +66,7 @@ test.each([
         id += "?v=1";
       }
 
-      const result = importSync(id);
-
-      expect(Object.keys(result)).toEqual([]);
-      expect(importSync(id)).toBe(result);
-      expect(readFileSync(marker, "utf8")).toBe("x");
+      expectOnlyOneExecution(id, marker);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
