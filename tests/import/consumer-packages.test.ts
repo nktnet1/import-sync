@@ -103,6 +103,40 @@ console.log(JSON.stringify(result));\n`,
   12_000,
 );
 
+test.each(["cjs", "mjs"])(
+  "accepts mixed-case file URL schemes in a built %s consumer",
+  (extension) => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "import-sync-file-scheme-")),
+    );
+    try {
+      const esmFile = join(root, "entry.mjs");
+      const cjsFile = join(root, "entry.cjs");
+      writeFileSync(esmFile, 'export const value = "esm";\n');
+      writeFileSync(cjsFile, 'module.exports = { value: "cjs" };\n');
+      const esmURL = pathToFileURL(esmFile).href.replace(/^file:/, "FILE:");
+      const cjsURL = pathToFileURL(cjsFile).href.replace(/^file:/, "FiLe:");
+      const consumer = join(root, `consumer.${extension}`);
+      writeFileSync(
+        consumer,
+        `${libraryImport(extension)}const esm = importSync(${JSON.stringify(esmURL)});
+const cjs = importSync(${JSON.stringify(cjsURL)});
+console.log(JSON.stringify({ esm: esm.value, cjs: cjs.value, cached: importSync(${JSON.stringify(esmURL)}) === esm }));
+`,
+      );
+
+      expect(JSON.parse(runConsumer(consumer, root))).toEqual({
+        esm: "esm",
+        cjs: "cjs",
+        cached: true,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+  12_000,
+);
+
 test("prefers the application's own installed package over the library's copy", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "import-sync-shadow-")));
   try {

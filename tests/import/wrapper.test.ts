@@ -83,6 +83,13 @@ test.each([
     description: "a file URL",
     id: new URL("../basic/basic.mjs", import.meta.url).href,
   },
+  {
+    description: "an uppercase file URL",
+    id: new URL("../basic/basic.mjs", import.meta.url).href.replace(
+      /^file:/,
+      "FILE:",
+    ),
+  },
 ])("does not capture a caller stack for $description", ({ id }) => {
   const originalCaptureStackTrace = Error.captureStackTrace;
   const value = { sentinel: true };
@@ -207,9 +214,22 @@ test.each([
   }
 });
 
-test.each(["file URL", "file URL with query and fragment"])(
-  "keeps the correct CommonJS fallback behaviour for a %s",
-  (description) => {
+test.each([
+  { description: "file URL", uppercase: false, withQuery: false },
+  { description: "uppercase file URL", uppercase: true, withQuery: false },
+  {
+    description: "file URL with query and fragment",
+    uppercase: false,
+    withQuery: true,
+  },
+  {
+    description: "uppercase file URL with query and fragment",
+    uppercase: true,
+    withQuery: true,
+  },
+])(
+  "keeps the correct CommonJS fallback behaviour for a $description",
+  ({ uppercase, withQuery }) => {
     const root = realpathSync(
       mkdtempSync(join(tmpdir(), "import-sync-fallback-url-")),
     );
@@ -218,13 +238,11 @@ test.each(["file URL", "file URL with query and fragment"])(
       writeFileSync(fixture, 'module.exports = { source: "native CJS" };');
       const nativeResult = createRequire(import.meta.url)(fixture);
       const url = pathToFileURL(fixture).href;
-      const id = description === "file URL" ? url : `${url}?v=1#entry`;
+      const id = `${uppercase ? url.replace(/^file:/, "FILE:") : url}${withQuery ? "?v=1#entry" : ""}`;
       const loaderValue = {};
       mocks.load.mockReturnValue(loaderValue);
 
-      expect(importSync(id)).toBe(
-        description === "file URL" ? nativeResult : loaderValue,
-      );
+      expect(importSync(id)).toBe(withQuery ? loaderValue : nativeResult);
       expect(mocks.load).toHaveBeenCalledExactlyOnceWith(id);
     } finally {
       rmSync(root, { recursive: true, force: true });

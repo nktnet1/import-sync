@@ -47,6 +47,9 @@ Require error message:
   }
 };
 
+/** URL schemes are case-insensitive, including file: URLs. */
+const isFileURL = (id: string): boolean => /^file:/i.test(id);
+
 /** Whether an empty, extensible object may need a CommonJS fallback. */
 const isEmptyObject = (value: unknown): boolean => {
   if (value === null || typeof value !== "object" || types.isProxy(value)) {
@@ -86,7 +89,7 @@ const importSync = (id: string, options: Options = {}) => {
   ) {
     // Match relative extension discovery for plain absolute filesystem paths.
     modulePath = findModuleFile(".", id);
-  } else if (path.isAbsolute(id) || id.startsWith("file:") || isBuiltin(id)) {
+  } else if (path.isAbsolute(id) || isFileURL(id) || isBuiltin(id)) {
     modulePath = id;
   } else {
     modulePath = resolvePackageId(
@@ -106,10 +109,10 @@ const importSync = (id: string, options: Options = {}) => {
   }
   // A file URL with query/fragment can have a different loader identity than
   // its filesystem path. Retrying it via native require would run it twice.
-  if (modulePath.startsWith("file:") && /[?#]/.test(modulePath)) {
+  if (isFileURL(modulePath) && /[?#]/.test(modulePath)) {
     return importedModule;
   }
-  const filename = modulePath.startsWith("file:")
+  const filename = isFileURL(modulePath)
     ? fileURLToPath(modulePath)
     : modulePath;
   let resolvedFilename = filename;
