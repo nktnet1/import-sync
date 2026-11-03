@@ -249,6 +249,8 @@ test("matches native ESM import conditions, including custom flags and built-ins
         exports: {
           "./environment": {
             import: {
+              '"development"': "./double-quote.mjs",
+              "'development'": "./single-quote.mjs",
               development: "./development.mjs",
               default: "./default.mjs",
             },
@@ -262,7 +264,14 @@ test("matches native ESM import conditions, including custom flags and built-ins
         },
       }),
     );
-    for (const name of ["development", "default", "addon", "sync"]) {
+    for (const name of [
+      "development",
+      "default",
+      "addon",
+      "sync",
+      "double-quote",
+      "single-quote",
+    ]) {
       writeFileSync(
         join(packageRoot, `${name}.mjs`),
         `export const value = ${JSON.stringify(name)};\n`,
@@ -295,6 +304,31 @@ test("matches native ESM import conditions, including custom flags and built-ins
       {
         flags: [],
         nodeOptions: "--conditions=development",
+        expected: ["development", "addon", "sync"],
+      },
+      {
+        flags: ['--conditions="development"'],
+        nodeOptions: "",
+        expected: ["double-quote", "addon", "sync"],
+      },
+      {
+        flags: ["--conditions='development'"],
+        nodeOptions: "",
+        expected: ["single-quote", "addon", "sync"],
+      },
+      {
+        flags: ["--conditions", '"development"'],
+        nodeOptions: "",
+        expected: ["double-quote", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: "--conditions='development'",
+        expected: ["single-quote", "addon", "sync"],
+      },
+      {
+        flags: [],
+        nodeOptions: '--conditions="development"',
         expected: ["development", "addon", "sync"],
       },
       {

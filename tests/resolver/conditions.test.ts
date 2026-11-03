@@ -47,6 +47,25 @@ test("reads user conditions from both command-line flags and NODE_OPTIONS", () =
   ).toBe(true);
 });
 
+test("preserves literal quotes in CLI conditions but tokenizes NODE_OPTIONS double quotes", () => {
+  const conditions = getImportConditions(
+    ['--conditions="quoted cli"', "-C", "'single cli'"],
+    `--conditions='literal' --conditions="grouped condition" -C "'also literal'"`,
+  );
+
+  for (const value of [
+    '"quoted cli"',
+    "'single cli'",
+    "'literal'",
+    "grouped condition",
+    "'also literal'",
+  ]) {
+    expect(conditions.has(value)).toBe(true);
+  }
+  expect(conditions.has("literal")).toBe(false);
+  expect(conditions.has("quoted cli")).toBe(false);
+});
+
 test("respects the native addon toggle and ignores empty condition values", () => {
   const withoutAddons = getImportConditions(
     ["--conditions=", "-C", "", "--addons", "--no-addons"],

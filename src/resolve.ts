@@ -19,8 +19,8 @@ export const getImportConditions = (
   // NODE_OPTIONS is processed before command-line flags by Node itself.
   const envArgs =
     nodeOptions
-      .match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g)
-      ?.map((arg) => arg.replace(/^["']|["']$/g, "")) ?? [];
+      .match(/(?:[^\s"]+|"[^"]*")+/g)
+      ?.map((arg) => arg.replaceAll('"', "")) ?? [];
   const args = [...envArgs, ...argv];
   let addonsEnabled = true;
 
@@ -33,12 +33,10 @@ export const getImportConditions = (
     } else if (arg === "--conditions" || arg === "-C") {
       const value = args[++index];
       if (value) {
-        conditions.add(value.replace(/^["']|["']$/g, ""));
+        conditions.add(value);
       }
     } else if (arg?.startsWith("--conditions=")) {
-      const value = arg
-        .slice("--conditions=".length)
-        .replace(/^["']|["']$/g, "");
+      const value = arg.slice("--conditions=".length);
       if (value) {
         conditions.add(value);
       }
