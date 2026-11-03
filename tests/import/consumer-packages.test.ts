@@ -407,6 +407,69 @@ test("matches native ESM import conditions, including custom flags and built-ins
 }, 45_000);
 
 testIsolatedConsumers(
+  "keeps the startup import conditions after %s consumers mutate process flags",
+  "import-sync-startup-conditions-",
+  (root, extension) => {
+    writeIsolatedPackage(
+      root,
+      "startup-conditions",
+      {
+        name: "startup-conditions",
+        type: "module",
+        exports: {
+          import: {
+            startup: "./startup.mjs",
+            runtime: "./runtime.mjs",
+            default: "./default.mjs",
+          },
+        },
+      },
+      {
+        "startup.mjs": 'export const value = "startup";\n',
+        "runtime.mjs": 'export const value = "runtime";\n',
+        "default.mjs": 'export const value = "default";\n',
+      },
+    );
+    const consumer = join(root, `consumer.${extension}`);
+    writeFileSync(
+      consumer,
+      `${libraryImport(extension)}
+(async () => {
+  // Neither change affects Node's native import conditions in this process.
+  process.env.NODE_OPTIONS = "--conditions=runtime";
+  process.execArgv.length = 0;
+  process.execArgv.push("--conditions=runtime");
+  const native = (await import("startup-conditions")).value;
+  const wrapper = importSync("startup-conditions").value;
+  console.log(JSON.stringify({ native, wrapper }));
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+    );
+
+    for (const { name, flags, nodeOptions, expected } of [
+      { name: "default", flags: [], nodeOptions: "", expected: "default" },
+      {
+        name: "NODE_OPTIONS",
+        flags: [],
+        nodeOptions: "--conditions=startup",
+        expected: "startup",
+      },
+      {
+        name: "CLI",
+        flags: ["--conditions=startup"],
+        nodeOptions: "",
+        expected: "startup",
+      },
+    ]) {
+      expect(
+        JSON.parse(runConsumer(consumer, root, { flags, nodeOptions })),
+        name,
+      ).toEqual({ native: expected, wrapper: expected });
+    }
+  },
+);
+
+testIsolatedConsumers(
   "resolves . and .. from actual %s consumer directories",
   "import-sync-dir-consumer-",
   (root, extension) => {

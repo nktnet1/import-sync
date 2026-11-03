@@ -93,6 +93,11 @@ export const getImportConditions = (
   return conditions;
 };
 
+// Node fixes its resolution conditions at process startup. Mutating NODE_OPTIONS
+// or process.execArgv later (for example, for a child process) must not change
+// which conditional exports importSync selects in this process.
+const startupImportConditions = getImportConditions();
+
 /** Prefer the existing require entry point; fall back only for missing conditions. */
 export const resolvePackageId = (
   id: string,
@@ -105,7 +110,7 @@ export const resolvePackageId = (
       case "ERR_PACKAGE_PATH_NOT_EXPORTED":
       case "ERR_PACKAGE_IMPORT_NOT_DEFINED":
         return resolve(id, {
-          conditions: getImportConditions(),
+          conditions: new Set(startupImportConditions),
         } as NodeJS.RequireResolveOptions);
       default:
         throw error;
