@@ -8,6 +8,13 @@ type CallSite = {
   getEvalOrigin(): string | null;
 };
 
+/** Whether an id is relative under the current platform's path syntax. */
+export const isRelativePath = (
+  id: string,
+  separator: string = path.sep,
+): boolean =>
+  /^\.\.?\//.test(id) || (separator === "\\" && /^\.\.?\\/.test(id));
+
 /**
  * Get the file path of the caller function.
  *
@@ -37,10 +44,12 @@ export const getCallerDirname = (): string => {
       throw new Error("Unknown caller file path");
     }
 
-    return path.dirname(
-      callerFilePath.startsWith("file:")
-        ? fileURLToPath(callerFilePath)
-        : callerFilePath,
+    return path.resolve(
+      path.dirname(
+        callerFilePath.startsWith("file:")
+          ? fileURLToPath(callerFilePath)
+          : callerFilePath,
+      ),
     );
   } finally {
     Error.prepareStackTrace = originalPrepareStackTrace;
@@ -80,6 +89,17 @@ export const findModuleFile = (
   basePath: string,
   modulePath: string,
 ): string => {
-  const filePath = path.join(basePath, modulePath);
-  return fs.existsSync(filePath) ? filePath : findFileWithExtensions(filePath);
+  const filePath = path.resolve(basePath, modulePath);
+  if (fs.statSync(filePath, { throwIfNoEntry: false })?.isFile()) {
+    return filePath;
+  }
+  try {
+    return findFileWithExtensions(filePath);
+  } catch (error) {
+    // Native resolution may still use the directory's package.json or index.
+    if (fs.statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {
+      return filePath;
+    }
+    throw error;
+  }
 };

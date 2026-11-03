@@ -1,6 +1,8 @@
+import { createRequire, isBuiltin } from "node:module";
+import path from "node:path";
 import esm from "esm-sync";
 
-import { findModuleFile, getCallerDirname } from "./files";
+import { findModuleFile, getCallerDirname, isRelativePath } from "./files";
 import { Options } from "./options";
 
 /**
@@ -31,6 +33,7 @@ Options:
   ${serializedOptions}
 Require error message:
   ${message}`,
+      { cause: error },
     );
   }
 };
@@ -48,7 +51,7 @@ const isEmptyObject = (value: unknown): boolean => {
   const prototype = Object.getPrototypeOf(value);
   return (
     (prototype === Object.prototype || prototype === null) &&
-    Object.keys(value).length === 0
+    Reflect.ownKeys(value).length === 0
   );
 };
 
@@ -61,9 +64,13 @@ const isEmptyObject = (value: unknown): boolean => {
  * @returns the imported module
  */
 const importSync = (id: string, options: Options = {}) => {
-  const modulePath = /^\.\.?\//.test(id)
+  const modulePath = isRelativePath(id)
     ? findModuleFile(options.basePath ?? getCallerDirname(), id)
-    : id;
+    : path.isAbsolute(id) || id.startsWith("file:") || isBuiltin(id)
+      ? id
+      : createRequire(
+          path.join(getCallerDirname(), "__import_sync__.cjs"),
+        ).resolve(id);
   const importedModule = esmImport(modulePath, options);
 
   // Only empty plain objects or module namespaces need the CommonJS fallback.

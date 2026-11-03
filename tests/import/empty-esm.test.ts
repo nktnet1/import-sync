@@ -25,6 +25,7 @@ test("does not run a successfully imported module with no exports twice", () => 
     const result = importSync(fixture);
 
     expect(Object.keys(result)).toEqual([]);
+    expect(importSync(fixture)).toBe(result);
     expect(readFileSync(marker, "utf8")).toBe("x");
   } finally {
     rmSync(root, { recursive: true, force: true });
