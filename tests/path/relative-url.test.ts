@@ -1,17 +1,12 @@
-import { spawnSync } from "node:child_process";
-import fs, {
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import fs, { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, vi } from "vitest";
 import { findRelativeModuleFile } from "#/files.ts";
 import importSync from "#/index.ts";
+import { runConsumer } from "../helpers/consumer.ts";
+import { withTemporaryDirectory } from "../helpers/fixtures.ts";
 
 test.each([
   { description: "a query", file: "entry.mjs", id: "./entry.mjs?version=1" },
@@ -36,24 +31,18 @@ test.each([
 ])(
   "resolves relative ESM specifiers containing $description",
   ({ file, id }) => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "import-sync-url-")));
-    try {
+    withTemporaryDirectory("import-sync-url-", (root) => {
       writeFileSync(join(root, file), 'export const value = "relative URL";\n');
 
       const result = importSync(id, { basePath: root });
       expect(result.value).toBe("relative URL");
       expect(importSync(id, { basePath: root })).toBe(result);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
 );
 
 test("preserves cache identity for distinct relative query strings", () => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-url-cache-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-url-cache-", (root) => {
     const marker = join(root, "marker");
     writeFileSync(
       join(root, "entry.mjs"),
@@ -66,24 +55,17 @@ test("preserves cache identity for distinct relative query strings", () => {
     expect(first).not.toBe(second);
     expect(importSync("./entry.mjs?a", { basePath: root })).toBe(first);
     expect(readFileSync(marker, "utf8")).toBe("xx");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test("preserves literal file paths containing special URL characters", () => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-literal-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-literal-", (root) => {
     const filename = "literal #%.mjs";
     writeFileSync(join(root, filename), "export const value = 42;\n");
 
     expect(importSync(`./${filename}`, { basePath: root }).value).toBe(42);
     expect(importSync(pathToFileURL(join(root, filename)).href).value).toBe(42);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test("preserves unexpected filesystem errors when a relative URL cannot be inspected", () => {
@@ -105,10 +87,7 @@ test("preserves unexpected filesystem errors when a relative URL cannot be inspe
 test.each(["cjs", "mjs"])(
   "loads encoded relative URLs in a built %s consumer without basePath",
   (extension) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-url-consumer-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-url-consumer-", (root) => {
       const libraryPath = realpathSync(
         fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
       );
@@ -124,16 +103,7 @@ test.each(["cjs", "mjs"])(
         `${prefix}\nconsole.log(importSync("./with%20space%20%23%25.mjs?version=1").value);\n`,
       );
 
-      const child = spawnSync(process.execPath, [consumer], {
-        cwd: root,
-        encoding: "utf8",
-        timeout: 8_000,
-      });
-      expect(child.error).toBeUndefined();
-      expect(child.status, child.stderr).toBe(0);
-      expect(child.stdout.trim()).toBe("consumer");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+      expect(runConsumer(consumer, root)).toBe("consumer");
+    });
   },
 );

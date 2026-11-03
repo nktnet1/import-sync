@@ -1,10 +1,4 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +12,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("esm-sync", () => ({ default: mocks.factory }));
 
 import importSync from "#/import.ts";
+import {
+  createPackageDirectory,
+  withTemporaryDirectory,
+} from "../helpers/fixtures.ts";
 
 const basicDirectory = realpathSync(
   fileURLToPath(new URL("../basic/", import.meta.url)),
@@ -36,6 +34,12 @@ function expectBasicModuleResolution(id: string): void {
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
     join(basicDirectory, "basic.mjs"),
   );
+}
+
+function expectNativeFallback(path: string): void {
+  const nativeResult = createRequire(import.meta.url)(path);
+  mocks.load.mockReturnValue({});
+  expect(importSync(path)).toBe(nativeResult);
 }
 
 test("resolves bare package IDs from the caller and forwards ESM options", () => {
@@ -199,19 +203,11 @@ test.each([
   { name: "an empty array", source: "module.exports = [];" },
   { name: "a function", source: "module.exports = () => 42;" },
 ])("preserves $name from the native CommonJS fallback", ({ source }) => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-fallback-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-fallback-", (root) => {
     const fixture = join(root, "fixture.cjs");
     writeFileSync(fixture, source);
-    const nativeResult = createRequire(import.meta.url)(fixture);
-    mocks.load.mockReturnValue({});
-
-    expect(importSync(fixture)).toBe(nativeResult);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+    expectNativeFallback(fixture);
+  });
 });
 
 test.each([
@@ -230,10 +226,7 @@ test.each([
 ])(
   "keeps the correct CommonJS fallback behaviour for a $description",
   ({ uppercase, withQuery }) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-fallback-url-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-fallback-url-", (root) => {
       const fixture = join(root, "fixture #%.cjs");
       writeFileSync(fixture, 'module.exports = { source: "native CJS" };');
       const nativeResult = createRequire(import.meta.url)(fixture);
@@ -244,50 +237,31 @@ test.each([
 
       expect(importSync(id)).toBe(withQuery ? loaderValue : nativeResult);
       expect(mocks.load).toHaveBeenCalledExactlyOnceWith(id);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
 );
 
 test("uses the native CommonJS fallback for directory package entries", () => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-fallback-directory-")),
-  );
-  try {
-    const directory = join(root, "fixture");
-    mkdirSync(directory);
-    writeFileSync(
-      join(directory, "package.json"),
-      JSON.stringify({ main: "./entry.cjs" }),
-    );
-    writeFileSync(
-      join(directory, "entry.cjs"),
+  withTemporaryDirectory("import-sync-fallback-directory-", (root) => {
+    const directory = createPackageDirectory(
+      root,
+      "fixture",
+      "entry.cjs",
       'module.exports = { source: "native CJS directory" };',
     );
-    const nativeResult = createRequire(import.meta.url)(directory);
-    mocks.load.mockReturnValue({});
-
-    expect(importSync(directory)).toBe(nativeResult);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+    expectNativeFallback(directory);
+  });
 });
 
 test("keeps the original namespace if the native fallback is also empty", () => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-fallback-empty-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-fallback-empty-", (root) => {
     const fixture = join(root, "fixture.cjs");
     writeFileSync(fixture, "module.exports = {};");
     const namespace = {};
     mocks.load.mockReturnValue(namespace);
 
     expect(importSync(fixture)).toBe(namespace);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test("returns the original empty result if the CommonJS fallback fails", () => {

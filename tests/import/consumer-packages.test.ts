@@ -1,15 +1,9 @@
-import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
+import { runConsumer } from "../helpers/consumer.ts";
+import { withTemporaryDirectory } from "../helpers/fixtures.ts";
 
 const libraryPath = realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
@@ -20,25 +14,11 @@ const libraryImport = (extension: string): string =>
     ? `import importSync from ${JSON.stringify(pathToFileURL(libraryPath).href)};\n`
     : `const importSync = require(${JSON.stringify(libraryPath)});\n`;
 
-const runConsumer = (consumerFile: string, root: string): string => {
-  const child = spawnSync(process.execPath, [consumerFile], {
-    cwd: root,
-    encoding: "utf8",
-    timeout: 8_000,
-  });
-  expect(child.error).toBeUndefined();
-  expect(child.status, child.stderr).toBe(0);
-  return child.stdout.trim();
-};
-
 /** Test resolution from a separate application, not from the library's node_modules. */
 test.each(["cjs", "mjs"])(
   "imports packages belonging to an isolated %s consumer",
   (extension) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-consumer-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-consumer-", (root) => {
       writeFileSync(
         join(root, "package.json"),
         JSON.stringify({
@@ -96,9 +76,7 @@ console.log(JSON.stringify(result));\n`,
         internal: "caller package scope",
         self: "caller package scope",
       });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
   12_000,
 );
@@ -106,10 +84,7 @@ console.log(JSON.stringify(result));\n`,
 test.each(["cjs", "mjs"])(
   "accepts mixed-case file URL schemes in a built %s consumer",
   (extension) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-file-scheme-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-file-scheme-", (root) => {
       const esmFile = join(root, "entry.mjs");
       const cjsFile = join(root, "entry.cjs");
       writeFileSync(esmFile, 'export const value = "esm";\n');
@@ -130,16 +105,13 @@ console.log(JSON.stringify({ esm: esm.value, cjs: cjs.value, cached: importSync(
         cjs: "cjs",
         cached: true,
       });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
   12_000,
 );
 
 test("prefers the application's own installed package over the library's copy", () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "import-sync-shadow-")));
-  try {
+  withTemporaryDirectory("import-sync-shadow-", (root) => {
     const packageRoot = join(root, "node_modules", "node-fetch");
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(
@@ -156,18 +128,13 @@ test("prefers the application's own installed package over the library's copy", 
       `const importSync = require(${JSON.stringify(libraryPath)});\nconsole.log(importSync("node-fetch").origin);\n`,
     );
     expect(runConsumer(consumerFile, root)).toBe("consumer");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test.each(["cjs", "mjs"])(
   "loads import-only conditional exports in isolated %s consumers",
   (extension) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-import-conditions-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-import-conditions-", (root) => {
       writeFileSync(
         join(root, "package.json"),
         JSON.stringify({
@@ -261,18 +228,13 @@ console.log(JSON.stringify(result));\n`,
         self: "self import",
         dualPackage: "require side",
       });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
   12_000,
 );
 
 test("matches native ESM import conditions, including custom flags and built-ins", () => {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "import-sync-native-conditions-")),
-  );
-  try {
+  withTemporaryDirectory("import-sync-native-conditions-", (root) => {
     const packageRoot = join(root, "node_modules", "conditional-library");
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(
@@ -420,31 +382,20 @@ test("matches native ESM import conditions, including custom flags and built-ins
     ];
 
     for (const { flags, nodeOptions, expected } of cases) {
-      const child = spawnSync(process.execPath, [...flags, consumerFile], {
-        cwd: root,
-        encoding: "utf8",
-        env: { ...process.env, NODE_OPTIONS: nodeOptions },
-        timeout: 8_000,
-      });
-      expect(child.error).toBeUndefined();
-      expect(child.status, child.stderr).toBe(0);
-      expect(JSON.parse(child.stdout.trim())).toEqual({
+      expect(
+        JSON.parse(runConsumer(consumerFile, root, { flags, nodeOptions })),
+      ).toEqual({
         native: expected,
         actual: expected,
       });
     }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 }, 45_000);
 
 test.each(["cjs", "mjs"])(
   "resolves . and .. from actual %s consumer directories",
   (extension) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-dir-consumer-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-dir-consumer-", (root) => {
       const project = join(root, "project");
       const nested = join(project, "nested");
       mkdirSync(nested, { recursive: true });
@@ -480,9 +431,7 @@ console.log(JSON.stringify(result));\n`,
         parent: "parent",
         explicit: "parent",
       });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
   12_000,
 );

@@ -1,9 +1,9 @@
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
+import { runConsumer } from "../helpers/consumer.ts";
+import { withTemporaryDirectory } from "../helpers/fixtures.ts";
 
 const libraryPath = realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
@@ -18,10 +18,7 @@ test.each([
 ])(
   "does not re-execute $syntax through a $extension URL with $suffix (relative: $relative)",
   ({ extension, syntax, suffix, relative }) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "import-sync-query-identity-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-query-identity-", (root) => {
       if (syntax === "esm") {
         writeFileSync(join(root, "package.json"), '{"type":"module"}');
       }
@@ -46,21 +43,12 @@ const second = importSync(${JSON.stringify(id)});
 console.log(JSON.stringify({ count: readFileSync(${JSON.stringify(marker)}, "utf8"), cached: first === second, keys: Reflect.ownKeys(first) }));
 `,
       );
-      const child = spawnSync(process.execPath, [consumer], {
-        cwd: root,
-        encoding: "utf8",
-        timeout: 8_000,
-      });
-      expect(child.error).toBeUndefined();
-      expect(child.status, child.stderr).toBe(0);
-      expect(JSON.parse(child.stdout.trim())).toEqual({
+      expect(JSON.parse(runConsumer(consumer, root))).toEqual({
         count: "x",
         cached: true,
         keys: [],
       });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
   },
   12_000,
 );
