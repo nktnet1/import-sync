@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 import { types } from "node:util";
 import esm from "esm-sync";
 
-import { findModuleFile, getCallerDirname, isRelativePath } from "#/files.ts";
+import {
+  findRelativeModuleFile,
+  getCallerDirname,
+  isRelativePath,
+} from "#/files.ts";
 import { Options } from "#/options.ts";
 import { resolvePackageId } from "#/resolve.ts";
 
@@ -70,7 +74,10 @@ const isEmptyObject = (value: unknown): boolean => {
 const importSync = (id: string, options: Options = {}) => {
   let modulePath: string;
   if (isRelativePath(id)) {
-    modulePath = findModuleFile(options.basePath ?? getCallerDirname(), id);
+    modulePath = findRelativeModuleFile(
+      options.basePath ?? getCallerDirname(),
+      id,
+    );
   } else if (path.isAbsolute(id) || id.startsWith("file:") || isBuiltin(id)) {
     modulePath = id;
   } else {

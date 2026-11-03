@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { VALID_FILE_EXTENSIONS } from "#/config.ts";
 
 type CallSite = {
@@ -57,6 +57,8 @@ export const getCallerDirname = (): string => {
   }
 };
 
+class MissingModuleFileError extends Error {}
+
 /**
  * Find the module file path by checking for available extensions
  * as defined by VALID_FILE_EXTENSIONS
@@ -72,7 +74,7 @@ const findFileWithExtensions = (filePath: string): string => {
       return extFilePath;
     }
   }
-  throw new Error(
+  throw new MissingModuleFileError(
     `No such file '${filePath}' with matching extensions [${VALID_FILE_EXTENSIONS}]`,
   );
 };
@@ -102,4 +104,29 @@ export const findModuleFile = (
     }
     throw error;
   }
+};
+
+/**
+ * Resolve a relative specifier without changing support for literal filenames
+ * containing URL special characters. When literal lookup fails, also accept
+ * ESM-style percent encoding, search parameters and fragments.
+ */
+export const findRelativeModuleFile = (
+  basePath: string,
+  id: string,
+): string => {
+  try {
+    return findModuleFile(basePath, id);
+  } catch (error) {
+    if (!(error instanceof MissingModuleFileError) || !/[?#%]/.test(id)) {
+      throw error;
+    }
+  }
+
+  const baseURL = pathToFileURL(`${path.resolve(basePath)}${path.sep}`);
+  const specifierURL = new URL(id, baseURL);
+  const resolvedPath = findModuleFile(basePath, fileURLToPath(specifierURL));
+  // Preserve a bare "?" or "#": URL.search and URL.hash return "" for those.
+  const suffix = specifierURL.href.match(/[?#].*$/)?.[0] ?? "";
+  return `${pathToFileURL(resolvedPath).href}${suffix}`;
 };
