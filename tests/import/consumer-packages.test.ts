@@ -15,6 +15,11 @@ const libraryPath = realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
 );
 
+const libraryImport = (extension: string): string =>
+  extension === "mjs"
+    ? `import importSync from ${JSON.stringify(pathToFileURL(libraryPath).href)};\n`
+    : `const importSync = require(${JSON.stringify(libraryPath)});\n`;
+
 const runConsumer = (consumerFile: string, root: string): string => {
   const child = spawnSync(process.execPath, [consumerFile], {
     cwd: root,
@@ -74,10 +79,7 @@ test.each(["cjs", "mjs"])(
       );
 
       const consumerFile = join(root, `consumer.${extension}`);
-      const loadLibrary =
-        extension === "mjs"
-          ? `import importSync from ${JSON.stringify(pathToFileURL(libraryPath).href)};\n`
-          : `const importSync = require(${JSON.stringify(libraryPath)});\n`;
+      const loadLibrary = libraryImport(extension);
       writeFileSync(
         consumerFile,
         `${loadLibrary}const result = {
@@ -124,3 +126,110 @@ test("prefers the application's own installed package over the library's copy", 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test.each(["cjs", "mjs"])(
+  "loads import-only conditional exports in isolated %s consumers",
+  (extension) => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "import-sync-import-conditions-")),
+    );
+    try {
+      writeFileSync(
+        join(root, "package.json"),
+        JSON.stringify({
+          name: "conditional-consumer",
+          type: "module",
+          imports: {
+            "#import-only": { import: "./internal.mjs" },
+            "#dual": {
+              import: "./internal.mjs",
+              require: "./internal.cjs",
+            },
+          },
+          exports: { "./self": { import: "./self.mjs" } },
+        }),
+      );
+      writeFileSync(
+        join(root, "internal.mjs"),
+        'export const value = "import alias";\n',
+      );
+      writeFileSync(
+        join(root, "internal.cjs"),
+        'module.exports = { value: "require alias" };\n',
+      );
+      writeFileSync(
+        join(root, "self.mjs"),
+        'export const value = "self import";\n',
+      );
+
+      const onlyImport = join(root, "node_modules", "only-import");
+      mkdirSync(join(onlyImport, "features"), { recursive: true });
+      writeFileSync(
+        join(onlyImport, "package.json"),
+        JSON.stringify({
+          name: "only-import",
+          type: "module",
+          exports: {
+            ".": { import: "./index.mjs" },
+            "./features/*": { import: "./features/*.mjs" },
+          },
+        }),
+      );
+      writeFileSync(
+        join(onlyImport, "index.mjs"),
+        'export const value = "import only";\n',
+      );
+      writeFileSync(
+        join(onlyImport, "features", "one.mjs"),
+        'export const value = "import feature";\n',
+      );
+
+      const dual = join(root, "node_modules", "dual-conditions");
+      mkdirSync(dual, { recursive: true });
+      writeFileSync(
+        join(dual, "package.json"),
+        JSON.stringify({
+          name: "dual-conditions",
+          type: "module",
+          exports: {
+            ".": { import: "./import.mjs", require: "./require.cjs" },
+          },
+        }),
+      );
+      writeFileSync(
+        join(dual, "import.mjs"),
+        'export const value = "import side";\n',
+      );
+      writeFileSync(
+        join(dual, "require.cjs"),
+        'module.exports = { value: "require side" };\n',
+      );
+
+      const consumerFile = join(root, `consumer.${extension}`);
+      writeFileSync(
+        consumerFile,
+        `${libraryImport(extension)}const result = {
+  onlyImport: importSync("only-import").value,
+  importSubpath: importSync("only-import/features/one").value,
+  importAlias: importSync("#import-only").value,
+  dualAlias: importSync("#dual").value,
+  self: importSync("conditional-consumer/self").value,
+  dualPackage: importSync("dual-conditions").value,
+};
+console.log(JSON.stringify(result));\n`,
+      );
+
+      expect(JSON.parse(runConsumer(consumerFile, root))).toEqual({
+        onlyImport: "import only",
+        importSubpath: "import feature",
+        importAlias: "import alias",
+        dualAlias: "require alias",
+        self: "self import",
+        dualPackage: "require side",
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+  12_000,
+);

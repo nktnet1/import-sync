@@ -7,6 +7,7 @@ import esm from "esm-sync";
 
 import { findModuleFile, getCallerDirname, isRelativePath } from "#/files.ts";
 import { Options } from "#/options.ts";
+import { resolvePackageId } from "#/resolve.ts";
 
 /**
  * Returns an ESM-imported module
@@ -73,9 +74,11 @@ const importSync = (id: string, options: Options = {}) => {
   } else if (path.isAbsolute(id) || id.startsWith("file:") || isBuiltin(id)) {
     modulePath = id;
   } else {
-    modulePath = createRequire(
-      path.join(getCallerDirname(), "__import_sync__.cjs"),
-    ).resolve(id);
+    modulePath = resolvePackageId(
+      id,
+      createRequire(path.join(getCallerDirname(), "__import_sync__.cjs"))
+        .resolve,
+    );
   }
 
   const importedModule = esmImport(modulePath, options);

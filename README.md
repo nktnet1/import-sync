@@ -139,6 +139,12 @@ Module name or relative path similar to CommonJS [require](https://nodejs.org/ap
 - `'node-fetch'`
   - `importSync` can import pure-esm [node-fetch](https://github.com/node-fetch/node-fetch) (v3) into your cjs project
 
+When an installed package exposes only an `"import"` conditional export,
+`importSync` can resolve that entry point from the calling application. Packages
+that expose both `"require"` and `"import"` continue to use their `"require"`
+entry point for compatibility. The same fallback applies to package self-references
+and `#imports` aliases.
+
 ### 2.2. options
 
 <table>
