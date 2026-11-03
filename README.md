@@ -46,8 +46,6 @@ Basic wrapper around [esm](https://github.com/nktnet1/esm-sync) for compatibilit
 
 Capable of importing ESM-only libraries such as [node-fetch@3](https://github.com/node-fetch/node-fetch#commonjs) in CJS projects
 
-[![Try with Replit](https://replit.com/badge?caption=Try%20with%20Replit)](https://replit.com/@nktnet1/import-sync-example#index.js)
-
 </div>
 
 ---
@@ -73,8 +71,6 @@ npm install import-sync
 ```
 
 ## 2. Usage
-
-Try with [Replit](https://replit.com/@nktnet1/import-sync-example#index.js).
 
 ```
 importSync(id, options);
