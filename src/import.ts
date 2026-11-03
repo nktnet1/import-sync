@@ -31,7 +31,9 @@ Require error message:
 
 /** Whether a loader result resembles an empty namespace or plain object. */
 const isEmptyObject = (value: unknown): boolean => {
-  if (value === null || typeof value !== "object") return false;
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
   const prototype = Object.getPrototypeOf(value);
   return (
     (prototype === Object.prototype || prototype === null) &&
@@ -48,19 +50,24 @@ const isEmptyObject = (value: unknown): boolean => {
  * @returns the imported module
  */
 const importSync = (id: string, options: Options = {}) => {
-  const basePath = options.basePath ?? getCallerDirname();
-  const modulePath = /^\.\.?\//.test(id) ? findModuleFile(basePath, id) : id;
+  const modulePath = /^\.\.?\//.test(id)
+    ? findModuleFile(options.basePath ?? getCallerDirname(), id)
+    : id;
   const importedModule = esmImport(modulePath, options);
 
   // Only empty plain objects or module namespaces need the CommonJS fallback.
   // Preserve direct exports such as null, functions, arrays and class instances.
-  if (!isEmptyObject(importedModule)) return importedModule;
+  if (!isEmptyObject(importedModule)) {
+    return importedModule;
+  }
 
   // In case CJS shows up as empty, e.g. when importing CommonJS/CommonTS in a test runner
   try {
     // biome-ignore lint/style/noCommonJs: allow CommonJS require fallback
     const basicModule = require(modulePath);
-    if (!isEmptyObject(basicModule)) return basicModule;
+    if (!isEmptyObject(basicModule)) {
+      return basicModule;
+    }
   } catch (_error) {
     /* nothing to do */
   }

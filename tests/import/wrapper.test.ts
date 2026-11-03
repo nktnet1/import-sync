@@ -45,6 +45,28 @@ test.each([
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(id);
 });
 
+test.each([
+  { description: "a package ID", id: "node:fs" },
+  {
+    description: "an absolute path",
+    id: join(realpathSync(tmpdir()), "fixture.mjs"),
+  },
+])("does not capture a caller stack for $description", ({ id }) => {
+  const originalCaptureStackTrace = Error.captureStackTrace;
+  const value = { sentinel: true };
+  mocks.load.mockReturnValue(value);
+
+  try {
+    Error.captureStackTrace = () => {
+      throw new Error("Unnecessary caller stack capture");
+    };
+    expect(importSync(id)).toBe(value);
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith(id);
+  } finally {
+    Error.captureStackTrace = originalCaptureStackTrace;
+  }
+});
+
 test("resolves extensionless paths against an explicit basePath", () => {
   const basePath = realpathSync(
     fileURLToPath(new URL("../basic/", import.meta.url)),
