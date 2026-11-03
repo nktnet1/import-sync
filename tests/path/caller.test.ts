@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
 import { getCallerDirname } from "#/files.ts";
 import importSync from "#/index.ts";
+import { withTemporaryDirectory } from "../helpers/fixtures.ts";
 
 const libraryPath = fs.realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
@@ -79,6 +80,72 @@ test("falls back to eval origin when the caller filename is absent", () => {
     },
   );
 });
+
+test.each(["single", "nested"])(
+  "extracts caller paths from %s V8 eval origins",
+  (level) => {
+    const callerFile = path.join(
+      fs.realpathSync(process.cwd()),
+      "caller (test).mjs",
+    );
+    const source = `${pathToFileURL(callerFile).href}:3:12`;
+    const origin =
+      level === "nested"
+        ? `eval at outer (eval at inner (${source}))`
+        : `eval at outer (${source})`;
+    withCapturedStack(
+      [fakeCallSite(null, null), fakeCallSite(null, origin)],
+      () => {
+        expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
+      },
+    );
+  },
+);
+
+test.each(["eval at missing filename", "eval at inner (unterminated"])(
+  "rejects malformed V8 eval origin %s",
+  (origin) => {
+    withCapturedStack(
+      [fakeCallSite(null, null), fakeCallSite(null, origin)],
+      () => {
+        expect(() => getCallerDirname()).toThrow("Unknown caller file path");
+      },
+    );
+  },
+);
+
+test.each(["cjs", "mjs"])(
+  "resolves relative imports from eval and nested eval in a built %s consumer",
+  (extension) => {
+    withTemporaryDirectory("import-sync-eval-", (root) => {
+      const directory = path.join(root, "folder (with spaces)");
+      fs.mkdirSync(directory);
+      fs.writeFileSync(
+        path.join(directory, "fixture.mjs"),
+        'export const value = "from eval";\n',
+      );
+      const prefix =
+        extension === "mjs"
+          ? `import importSync from ${JSON.stringify(pathToFileURL(libraryPath).href)};`
+          : `const importSync = require(${JSON.stringify(libraryPath)});`;
+      const expression = 'importSync("./fixture.mjs").value';
+      const nestedExpression = `eval(${JSON.stringify(expression)})`;
+      const consumer = path.join(directory, `consumer.${extension}`);
+      fs.writeFileSync(
+        consumer,
+        `${prefix}\nconsole.log(JSON.stringify([eval(${JSON.stringify(expression)}), eval(${JSON.stringify(nestedExpression)})]));\n`,
+      );
+      const result = spawnSync(process.execPath, [consumer], {
+        encoding: "utf8",
+        timeout: 8_000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual(["from eval", "from eval"]);
+    });
+  },
+  12_000,
+);
 
 test("reports unknown callers without leaking custom stack preparation", () => {
   const originalStackLimit = Error.stackTraceLimit;

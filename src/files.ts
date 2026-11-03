@@ -8,6 +8,20 @@ type CallSite = {
   getEvalOrigin(): string | null;
 };
 
+/** Extract the source filename from V8's potentially nested eval origins. */
+const evalOriginFilename = (origin: string): string | undefined => {
+  let location = origin;
+  let evaluated = false;
+  while (location.startsWith("eval at ")) {
+    const opening = location.indexOf("(");
+    if (opening < 0 || !location.endsWith(")")) return undefined;
+    location = location.slice(opening + 1, -1);
+    evaluated = true;
+  }
+  // V8 appends :line:column to eval origins, not to ordinary filenames.
+  return evaluated ? location.replace(/:\d+:\d+$/, "") : location;
+};
+
 /** Dot-only paths name directories, regardless of platform. */
 const isDirectoryShorthand = (id: string): boolean => id === "." || id === "..";
 
@@ -44,7 +58,10 @@ export const getCallerDirname = (): string => {
     const stack = err.stack as unknown as CallSite[] | undefined;
 
     const caller = stack?.[1];
-    const callerFilePath = caller?.getFileName() ?? caller?.getEvalOrigin();
+    const fileName = caller?.getFileName();
+    const origin = fileName ? undefined : caller?.getEvalOrigin();
+    const callerFilePath =
+      fileName ?? (origin ? evalOriginFilename(origin) : undefined);
     if (!callerFilePath) {
       throw new Error("Unknown caller file path");
     }
