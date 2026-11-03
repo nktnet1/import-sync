@@ -11,33 +11,54 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("esm-sync", () => ({ default: mocks.factory }));
 
-import importSync from "../../src/import";
+import importSync from "#/import.ts";
+
+const basicDirectory = realpathSync(
+  fileURLToPath(new URL("../basic/", import.meta.url)),
+);
 
 beforeEach(() => {
   mocks.load.mockReset();
   mocks.factory.mockReset().mockReturnValue(mocks.load);
 });
 
-test("forwards bare package IDs and ESM options without rewriting them", () => {
+function expectBasicModuleResolution(id: string): void {
+  const value = { sentinel: true };
+  mocks.load.mockReturnValue(value);
+
+  expect(importSync(id, { basePath: basicDirectory })).toBe(value);
+  expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+    join(basicDirectory, "basic.mjs"),
+  );
+}
+
+test("resolves bare package IDs from the caller and forwards ESM options", () => {
   const esmOptions = { mode: "strict" } as const;
   const value = { sentinel: true };
   mocks.load.mockReturnValue(value);
 
-  expect(importSync("example-package", { esmOptions })).toBe(value);
-  expect(mocks.load).toHaveBeenCalledExactlyOnceWith("example-package");
+  expect(importSync("node-fetch", { esmOptions })).toBe(value);
+  expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+    createRequire(import.meta.url).resolve("node-fetch"),
+  );
   expect(mocks.factory).toHaveBeenCalledExactlyOnceWith(
     expect.anything(),
     esmOptions,
   );
 });
 
-test.each([
-  { description: "a package ID", id: "example-package" },
-  {
-    description: "an absolute path",
-    id: join(realpathSync(tmpdir()), "example-module.mjs"),
-  },
-])("ignores basePath for $description", ({ id }) => {
+test("ignores basePath when resolving a package ID", () => {
+  const value = { sentinel: true };
+  mocks.load.mockReturnValue(value);
+
+  expect(importSync("node-fetch", { basePath: "/ignored" })).toBe(value);
+  expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+    createRequire(import.meta.url).resolve("node-fetch"),
+  );
+});
+
+test("ignores basePath for absolute paths", () => {
+  const id = join(realpathSync(tmpdir()), "example-module.mjs");
   const value = { sentinel: true };
   mocks.load.mockReturnValue(value);
 
@@ -46,10 +67,15 @@ test.each([
 });
 
 test.each([
-  { description: "a package ID", id: "node:fs" },
+  { description: "a built-in package ID", id: "node:fs" },
+  { description: "a bare built-in package ID", id: "fs" },
   {
     description: "an absolute path",
     id: join(realpathSync(tmpdir()), "fixture.mjs"),
+  },
+  {
+    description: "a file URL",
+    id: new URL("../basic/basic.mjs", import.meta.url).href,
   },
 ])("does not capture a caller stack for $description", ({ id }) => {
   const originalCaptureStackTrace = Error.captureStackTrace;
@@ -68,17 +94,27 @@ test.each([
 });
 
 test("resolves extensionless paths against an explicit basePath", () => {
-  const basePath = realpathSync(
-    fileURLToPath(new URL("../basic/", import.meta.url)),
-  );
+  expectBasicModuleResolution("./basic");
+});
+
+test("resolves relative basePath values from the working directory", () => {
   const value = { sentinel: true };
   mocks.load.mockReturnValue(value);
+  const basePath = "tests/basic";
+  const expectedRoot = realpathSync(process.cwd());
 
   expect(importSync("./basic", { basePath })).toBe(value);
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
-    join(basePath, "basic.mjs"),
+    realpathSync(join(expectedRoot, basePath, "basic.mjs")),
   );
 });
+
+test.skipIf(process.platform !== "win32")(
+  "recognises backslash-prefixed relative paths on Windows",
+  () => {
+    expectBasicModuleResolution(String.raw`.\basic`);
+  },
+);
 
 test.each([
   { description: "null", value: null },
@@ -90,8 +126,8 @@ test.each([
 ])("preserves $description returned by the loader", ({ value }) => {
   mocks.load.mockReturnValue(value);
 
-  expect(importSync("example-package")).toBe(value);
-  expect(mocks.load).toHaveBeenCalledExactlyOnceWith("example-package");
+  expect(importSync("node:fs")).toBe(value);
+  expect(mocks.load).toHaveBeenCalledExactlyOnceWith("node:fs");
 });
 
 test.each([
@@ -103,6 +139,35 @@ test.each([
     value: Object.freeze(Object.create(null)),
   },
 ])("preserves $description instead of falling back to require", ({ value }) => {
+  mocks.load.mockReturnValue(value);
+
+  expect(importSync("node:fs")).toBe(value);
+});
+
+test.each([
+  {
+    description: "symbol-only exports",
+    value: { [Symbol.for("fixture")]: 42 },
+  },
+  {
+    description: "non-enumerable exports",
+    value: Object.defineProperty({}, "hidden", { value: 42 }),
+  },
+])("preserves $description without a native require fallback", ({ value }) => {
+  mocks.load.mockReturnValue(value);
+
+  expect(importSync("node:fs")).toBe(value);
+});
+
+test("does not introspect a Proxy returned by the loader", () => {
+  const value = new Proxy(
+    {},
+    {
+      isExtensible: () => {
+        throw new Error("must not inspect an exported Proxy");
+      },
+    },
+  );
   mocks.load.mockReturnValue(value);
 
   expect(importSync("node:fs")).toBe(value);
@@ -156,7 +221,9 @@ test("returns the original empty result if the CommonJS fallback fails", () => {
   const value = {};
   mocks.load.mockReturnValue(value);
 
-  expect(importSync("package-that-does-not-exist")).toBe(value);
+  expect(importSync(join(realpathSync(tmpdir()), "missing-fallback.cjs"))).toBe(
+    value,
+  );
 });
 
 test("adds the requested module and options to loader errors", () => {
@@ -165,8 +232,21 @@ test("adds the requested module and options to loader errors", () => {
   });
   const options = { basePath: "/unused" };
 
-  expect(() => importSync("example-package", options)).toThrow(
-    /Failed to import from:\s+example-package[\s\S]*Options:[\s\S]*"basePath":"\/unused"[\s\S]*Require error message:[\s\S]*controlled failure/,
+  expect(() => importSync("node:fs", options)).toThrow(
+    /Failed to import from:\s+node:fs[\s\S]*Options:[\s\S]*"basePath":"\/unused"[\s\S]*Require error message:[\s\S]*controlled failure/,
+  );
+});
+
+test("preserves the original loader error as the cause", () => {
+  const cause = Object.assign(new Error("controlled failure"), {
+    code: "MODULE_NOT_FOUND",
+  });
+  mocks.load.mockImplementation(() => {
+    throw cause;
+  });
+
+  expect(() => importSync("node:fs")).toThrow(
+    expect.objectContaining({ cause }),
   );
 });
 
@@ -175,8 +255,8 @@ test("reports loader initialisation failures with the same context", () => {
     throw new Error("factory failure");
   });
 
-  expect(() => importSync("example-package")).toThrow(
-    /Failed to import from:[\s\S]*example-package[\s\S]*factory failure/,
+  expect(() => importSync("node:fs")).toThrow(
+    /Failed to import from:[\s\S]*node:fs[\s\S]*factory failure/,
   );
 });
 
@@ -185,7 +265,7 @@ test("wraps non-Error loader failures", () => {
     throw "non-Error failure";
   });
 
-  expect(() => importSync("example-package")).toThrow(
+  expect(() => importSync("node:fs")).toThrow(
     /Failed to import from:[\s\S]*non-Error failure/,
   );
 });
@@ -199,7 +279,7 @@ test("preserves import diagnostics even when options cannot be JSON serialized",
     throw new Error("original loader failure");
   });
 
-  expect(() => importSync("example-package", options)).toThrow(
-    /Failed to import from:[\s\S]*example-package[\s\S]*\[unserializable options\][\s\S]*original loader failure/,
+  expect(() => importSync("node:fs", options)).toThrow(
+    /Failed to import from:[\s\S]*node:fs[\s\S]*\[unserializable options\][\s\S]*original loader failure/,
   );
 });

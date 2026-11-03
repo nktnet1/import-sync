@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import importSync from "../../src";
-import { getCallerDirname } from "../../src/files";
+import { getCallerDirname } from "#/files.ts";
+import importSync from "#/index.ts";
 
 const libraryPath = fs.realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
@@ -45,6 +45,29 @@ test("decodes escaped ESM caller URLs", () => {
       expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
     },
   );
+});
+
+test("uses the working directory for a relative eval caller", () => {
+  withCapturedStack(
+    [fakeCallSite(null, null), fakeCallSite("[eval]", null)],
+    () => {
+      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
+    },
+  );
+});
+
+test("resolves package imports from a CommonJS eval caller", () => {
+  const cwd = fs.realpathSync(process.cwd());
+  const consumer = `const importSync = require(${JSON.stringify(libraryPath)});
+if (typeof importSync("node-fetch").default !== "function") throw new Error("incorrect export");
+`;
+  const result = spawnSync(process.execPath, ["-e", consumer], {
+    cwd,
+    encoding: "utf8",
+    timeout: 8_000,
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
 });
 
 test("falls back to eval origin when the caller filename is absent", () => {

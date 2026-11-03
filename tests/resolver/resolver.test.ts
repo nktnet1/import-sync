@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import importSync from "../../src";
+import importSync from "#/index.ts";
 import nativeImportSync from "../native-import-sync";
 
 test("Can resolve module imports that are pure-esm, e.g. node-fetch", () => {

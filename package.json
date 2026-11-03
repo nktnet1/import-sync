@@ -64,10 +64,12 @@
   },
   "packageManager": "pnpm@12.16.1",
   "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
   "types": "./dist/index.d.cts",
   "exports": {
     ".": "./dist/index.cjs",
     "./package.json": "./package.json"
+  },
+  "imports": {
+    "#/*": "./src/*"
   }
 }

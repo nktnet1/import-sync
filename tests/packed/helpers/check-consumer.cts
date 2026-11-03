@@ -2,7 +2,7 @@
 const assert: typeof import("node:assert/strict") = require("node:assert/strict");
 
 function checkConsumer(
-  load: typeof import("../../../src/index.ts").default,
+  load: typeof import("#/index.ts").default,
   basePath: string,
   target = process.argv[2] ?? "both",
 ): void {
