@@ -145,6 +145,7 @@ export const findRelativeModuleFile = (
   const specifierURL = new URL(id, baseURL);
   const resolvedPath = findModuleFile(basePath, fileURLToPath(specifierURL));
   // Preserve a bare "?" or "#": URL.search and URL.hash return "" for those.
-  const suffix = specifierURL.href.match(/[?#].*$/)?.[0] ?? "";
+  const suffixStart = specifierURL.href.search(/[?#]/);
+  const suffix = suffixStart === -1 ? "" : specifierURL.href.slice(suffixStart);
   return `${pathToFileURL(resolvedPath).href}${suffix}`;
 };

@@ -6,6 +6,78 @@
  * The Set-based `conditions` option is supported by Node's resolver, but is not
  * part of the public `RequireResolveOptions` declaration. Keep it isolated here.
  */
+/** Tokenize NODE_OPTIONS using Node's double-quote and escape rules. */
+const tokenizeNodeOptions = (nodeOptions: string): string[] => {
+  const args: string[] = [];
+  let currentArg = "";
+  let inDoubleQuotes = false;
+
+  for (let index = 0; index < nodeOptions.length; index++) {
+    const character = nodeOptions[index];
+    if (character === '"') {
+      inDoubleQuotes = !inDoubleQuotes;
+      continue;
+    }
+    if (
+      inDoubleQuotes &&
+      character === "\\" &&
+      index + 1 < nodeOptions.length
+    ) {
+      currentArg += nodeOptions[++index];
+      continue;
+    }
+    if (!inDoubleQuotes && /\s/.test(character)) {
+      if (currentArg) {
+        args.push(currentArg);
+        currentArg = "";
+      }
+      continue;
+    }
+    currentArg += character;
+  }
+  if (currentArg) {
+    args.push(currentArg);
+  }
+  return args;
+};
+
+/** Add custom flags without interpreting or stripping literal quote characters. */
+const addConditionFlags = (
+  args: readonly string[],
+  conditions: Set<string>,
+): void => {
+  let addonsEnabled = true;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    switch (arg) {
+      case "--no-addons":
+        addonsEnabled = false;
+        break;
+      case "--addons":
+        addonsEnabled = true;
+        break;
+      case "--conditions":
+      case "-C": {
+        const value = args[++index];
+        if (value) {
+          conditions.add(value);
+        }
+        break;
+      }
+      default:
+        if (arg?.startsWith("--conditions=")) {
+          const value = arg.slice("--conditions=".length);
+          if (value) {
+            conditions.add(value);
+          }
+        }
+    }
+  }
+  if (addonsEnabled) {
+    conditions.add("node-addons");
+  }
+};
+
 /** Recreate the import conditions Node uses, including user-supplied flags. */
 export const getImportConditions = (
   argv: readonly string[] = process.execArgv,
@@ -17,58 +89,7 @@ export const getImportConditions = (
     conditions.add("module-sync");
   }
   // NODE_OPTIONS is processed before command-line flags by Node itself.
-  const envArgs: string[] = [];
-  let currentArg = "";
-  let inDoubleQuotes = false;
-  for (let index = 0; index < nodeOptions.length; index++) {
-    const character = nodeOptions[index];
-    if (character === '"') {
-      inDoubleQuotes = !inDoubleQuotes;
-    } else if (
-      inDoubleQuotes &&
-      character === "\\" &&
-      index + 1 < nodeOptions.length
-    ) {
-      // Node treats backslashes as escapes inside NODE_OPTIONS double quotes.
-      currentArg += nodeOptions[++index];
-    } else if (!inDoubleQuotes && /\s/.test(character)) {
-      if (currentArg) {
-        envArgs.push(currentArg);
-        currentArg = "";
-      }
-    } else {
-      currentArg += character;
-    }
-  }
-  if (currentArg) {
-    envArgs.push(currentArg);
-  }
-  const args = [...envArgs, ...argv];
-  let addonsEnabled = true;
-
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index];
-    if (arg === "--no-addons") {
-      addonsEnabled = false;
-    } else if (arg === "--addons") {
-      addonsEnabled = true;
-    } else if (arg === "--conditions" || arg === "-C") {
-      const value = args[++index];
-      if (value) {
-        conditions.add(value);
-      }
-    } else if (arg?.startsWith("--conditions=")) {
-      const value = arg.slice("--conditions=".length);
-      if (value) {
-        conditions.add(value);
-      }
-    }
-  }
-
-  if (addonsEnabled) {
-    conditions.add("node-addons");
-  }
-
+  addConditionFlags([...tokenizeNodeOptions(nodeOptions), ...argv], conditions);
   return conditions;
 };
 

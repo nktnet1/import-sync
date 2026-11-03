@@ -1,5 +1,5 @@
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
 import { runConsumer } from "../helpers/consumer.ts";
@@ -14,113 +14,141 @@ const libraryImport = (extension: string): string =>
     ? `import importSync from ${JSON.stringify(pathToFileURL(libraryPath).href)};\n`
     : `const importSync = require(${JSON.stringify(libraryPath)});\n`;
 
+/** Write a package into the isolated application's own node_modules. */
+function writeIsolatedPackage(
+  root: string,
+  name: string,
+  metadata: Record<string, unknown>,
+  modules: Record<string, string>,
+): void {
+  const directory = join(root, "node_modules", name);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "package.json"), JSON.stringify(metadata));
+  for (const [filename, source] of Object.entries(modules)) {
+    const modulePath = join(directory, filename);
+    mkdirSync(dirname(modulePath), { recursive: true });
+    writeFileSync(modulePath, source);
+  }
+}
+
+/** Each consumer executes against the built package from its own directory. */
+function expectConsumerResult(
+  root: string,
+  extension: string,
+  source: string,
+  expected: Record<string, unknown>,
+): void {
+  const consumer = join(root, `consumer.${extension}`);
+  writeFileSync(consumer, `${libraryImport(extension)}${source}`);
+  expect(JSON.parse(runConsumer(consumer, root))).toEqual(expected);
+}
+
+/** Run both published-package consumer formats with identical test isolation. */
+function testIsolatedConsumers(
+  name: string,
+  directoryPrefix: string,
+  verify: (root: string, extension: string) => void,
+): void {
+  test.each(["cjs", "mjs"])(
+    name,
+    (extension) =>
+      withTemporaryDirectory(directoryPrefix, (root) =>
+        verify(root, extension),
+      ),
+    12_000,
+  );
+}
+
 /** Test resolution from a separate application, not from the library's node_modules. */
-test.each(["cjs", "mjs"])(
+testIsolatedConsumers(
   "imports packages belonging to an isolated %s consumer",
-  (extension) => {
-    withTemporaryDirectory("import-sync-consumer-", (root) => {
-      writeFileSync(
-        join(root, "package.json"),
-        JSON.stringify({
-          name: "caller-application",
-          type: "module",
-          imports: { "#internal": "./internal.mjs" },
-          exports: { "./self": "./internal.mjs" },
-        }),
-      );
-      writeFileSync(
-        join(root, "internal.mjs"),
-        'export const value = "caller package scope";\n',
-      );
-      const packageRoot = join(root, "node_modules", "caller-only-package");
-      mkdirSync(packageRoot, { recursive: true });
-      writeFileSync(
-        join(packageRoot, "package.json"),
-        JSON.stringify({ name: "caller-only-package", main: "index.cjs" }),
-      );
-      writeFileSync(
-        join(packageRoot, "index.cjs"),
-        'module.exports = { origin: "consumer", value: 42 };\n',
-      );
+  "import-sync-consumer-",
+  (root, extension) => {
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "caller-application",
+        type: "module",
+        imports: { "#internal": "./internal.mjs" },
+        exports: { "./self": "./internal.mjs" },
+      }),
+    );
+    writeFileSync(
+      join(root, "internal.mjs"),
+      'export const value = "caller package scope";\n',
+    );
+    writeIsolatedPackage(
+      root,
+      "caller-only-package",
+      { name: "caller-only-package", main: "index.cjs" },
+      {
+        "index.cjs": 'module.exports = { origin: "consumer", value: 42 };\n',
+      },
+    );
+    writeIsolatedPackage(
+      root,
+      "@scope/caller-only",
+      {
+        name: "@scope/caller-only",
+        type: "module",
+        exports: { "./feature": "./feature.mjs" },
+      },
+      { "feature.mjs": 'export const value = "scoped feature";\n' },
+    );
 
-      const scopedRoot = join(root, "node_modules", "@scope", "caller-only");
-      mkdirSync(scopedRoot, { recursive: true });
-      writeFileSync(
-        join(scopedRoot, "package.json"),
-        JSON.stringify({
-          name: "@scope/caller-only",
-          type: "module",
-          exports: { "./feature": "./feature.mjs" },
-        }),
-      );
-      writeFileSync(
-        join(scopedRoot, "feature.mjs"),
-        'export const value = "scoped feature";\n',
-      );
-
-      const consumerFile = join(root, `consumer.${extension}`);
-      const loadLibrary = libraryImport(extension);
-      writeFileSync(
-        consumerFile,
-        `${loadLibrary}const result = {
+    expectConsumerResult(
+      root,
+      extension,
+      `const result = {
   package: importSync("caller-only-package").value,
   scoped: importSync("@scope/caller-only/feature").value,
   internal: importSync("#internal").value,
   self: importSync("caller-application/self").value,
 };
 console.log(JSON.stringify(result));\n`,
-      );
-      expect(JSON.parse(runConsumer(consumerFile, root))).toEqual({
+      {
         package: 42,
         scoped: "scoped feature",
         internal: "caller package scope",
         self: "caller package scope",
-      });
-    });
+      },
+    );
   },
-  12_000,
 );
 
-test.each(["cjs", "mjs"])(
+testIsolatedConsumers(
   "accepts mixed-case file URL schemes in a built %s consumer",
-  (extension) => {
-    withTemporaryDirectory("import-sync-file-scheme-", (root) => {
-      const esmFile = join(root, "entry.mjs");
-      const cjsFile = join(root, "entry.cjs");
-      writeFileSync(esmFile, 'export const value = "esm";\n');
-      writeFileSync(cjsFile, 'module.exports = { value: "cjs" };\n');
-      const esmURL = pathToFileURL(esmFile).href.replace(/^file:/, "FILE:");
-      const cjsURL = pathToFileURL(cjsFile).href.replace(/^file:/, "FiLe:");
-      const consumer = join(root, `consumer.${extension}`);
-      writeFileSync(
-        consumer,
-        `${libraryImport(extension)}const esm = importSync(${JSON.stringify(esmURL)});
+  "import-sync-file-scheme-",
+  (root, extension) => {
+    const esmFile = join(root, "entry.mjs");
+    const cjsFile = join(root, "entry.cjs");
+    writeFileSync(esmFile, 'export const value = "esm";\n');
+    writeFileSync(cjsFile, 'module.exports = { value: "cjs" };\n');
+    const esmURL = pathToFileURL(esmFile).href.replace(/^file:/, "FILE:");
+    const cjsURL = pathToFileURL(cjsFile).href.replace(/^file:/, "FiLe:");
+    expectConsumerResult(
+      root,
+      extension,
+      `const esm = importSync(${JSON.stringify(esmURL)});
 const cjs = importSync(${JSON.stringify(cjsURL)});
 console.log(JSON.stringify({ esm: esm.value, cjs: cjs.value, cached: importSync(${JSON.stringify(esmURL)}) === esm }));
 `,
-      );
-
-      expect(JSON.parse(runConsumer(consumer, root))).toEqual({
+      {
         esm: "esm",
         cjs: "cjs",
         cached: true,
-      });
-    });
+      },
+    );
   },
-  12_000,
 );
 
 test("prefers the application's own installed package over the library's copy", () => {
   withTemporaryDirectory("import-sync-shadow-", (root) => {
-    const packageRoot = join(root, "node_modules", "node-fetch");
-    mkdirSync(packageRoot, { recursive: true });
-    writeFileSync(
-      join(packageRoot, "package.json"),
-      JSON.stringify({ name: "node-fetch", main: "index.cjs" }),
-    );
-    writeFileSync(
-      join(packageRoot, "index.cjs"),
-      'module.exports = { origin: "consumer" };\n',
+    writeIsolatedPackage(
+      root,
+      "node-fetch",
+      { name: "node-fetch", main: "index.cjs" },
+      { "index.cjs": 'module.exports = { origin: "consumer" };\n' },
     );
     const consumerFile = join(root, "consumer.cjs");
     writeFileSync(
@@ -131,85 +159,74 @@ test("prefers the application's own installed package over the library's copy", 
   });
 });
 
-test.each(["cjs", "mjs"])(
+testIsolatedConsumers(
   "loads import-only conditional exports in isolated %s consumers",
-  (extension) => {
-    withTemporaryDirectory("import-sync-import-conditions-", (root) => {
-      writeFileSync(
-        join(root, "package.json"),
-        JSON.stringify({
-          name: "conditional-consumer",
-          type: "module",
-          imports: {
-            "#import-only": { import: "./internal.mjs" },
-            "#dual": {
-              import: "./internal.mjs",
-              require: "./internal.cjs",
-            },
+  "import-sync-import-conditions-",
+  (root, extension) => {
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "conditional-consumer",
+        type: "module",
+        imports: {
+          "#import-only": { import: "./internal.mjs" },
+          "#dual": {
+            import: "./internal.mjs",
+            require: "./internal.cjs",
           },
-          exports: { "./self": { import: "./self.mjs" } },
-        }),
-      );
-      writeFileSync(
-        join(root, "internal.mjs"),
-        'export const value = "import alias";\n',
-      );
-      writeFileSync(
-        join(root, "internal.cjs"),
-        'module.exports = { value: "require alias" };\n',
-      );
-      writeFileSync(
-        join(root, "self.mjs"),
-        'export const value = "self import";\n',
-      );
+        },
+        exports: { "./self": { import: "./self.mjs" } },
+      }),
+    );
+    writeFileSync(
+      join(root, "internal.mjs"),
+      'export const value = "import alias";\n',
+    );
+    writeFileSync(
+      join(root, "internal.cjs"),
+      'module.exports = { value: "require alias" };\n',
+    );
+    writeFileSync(
+      join(root, "self.mjs"),
+      'export const value = "self import";\n',
+    );
 
-      const onlyImport = join(root, "node_modules", "only-import");
-      mkdirSync(join(onlyImport, "features"), { recursive: true });
-      writeFileSync(
-        join(onlyImport, "package.json"),
-        JSON.stringify({
-          name: "only-import",
-          type: "module",
-          exports: {
-            ".": { import: "./index.mjs" },
-            "./features/*": { import: "./features/*.mjs" },
-          },
-        }),
-      );
-      writeFileSync(
-        join(onlyImport, "index.mjs"),
-        'export const value = "import only";\n',
-      );
-      writeFileSync(
-        join(onlyImport, "features", "one.mjs"),
-        'export const value = "import feature";\n',
-      );
+    writeIsolatedPackage(
+      root,
+      "only-import",
+      {
+        name: "only-import",
+        type: "module",
+        exports: {
+          ".": { import: "./index.mjs" },
+          "./features/*": { import: "./features/*.mjs" },
+        },
+      },
+      {
+        "index.mjs": 'export const value = "import only";\n',
+        "features/one.mjs": 'export const value = "import feature";\n',
+      },
+    );
+    writeIsolatedPackage(
+      root,
+      "dual-conditions",
+      {
+        name: "dual-conditions",
+        type: "module",
+        exports: {
+          ".": { import: "./import.mjs", require: "./require.cjs" },
+        },
+      },
+      {
+        "import.mjs": 'export const value = "import side";\n',
+        "require.cjs": 'module.exports = { value: "require side" };\n',
+      },
+    );
 
-      const dual = join(root, "node_modules", "dual-conditions");
-      mkdirSync(dual, { recursive: true });
-      writeFileSync(
-        join(dual, "package.json"),
-        JSON.stringify({
-          name: "dual-conditions",
-          type: "module",
-          exports: {
-            ".": { import: "./import.mjs", require: "./require.cjs" },
-          },
-        }),
-      );
-      writeFileSync(
-        join(dual, "import.mjs"),
-        'export const value = "import side";\n',
-      );
-      writeFileSync(
-        join(dual, "require.cjs"),
-        'module.exports = { value: "require side" };\n',
-      );
-
-      const consumerFile = join(root, `consumer.${extension}`);
-      writeFileSync(
-        consumerFile,
-        `${libraryImport(extension)}const result = {
+    expectConsumerResult(
+      root,
+      extension,
+      `const result = {
   onlyImport: importSync("only-import").value,
   importSubpath: importSync("only-import/features/one").value,
   importAlias: importSync("#import-only").value,
@@ -218,19 +235,16 @@ test.each(["cjs", "mjs"])(
   dualPackage: importSync("dual-conditions").value,
 };
 console.log(JSON.stringify(result));\n`,
-      );
-
-      expect(JSON.parse(runConsumer(consumerFile, root))).toEqual({
+      {
         onlyImport: "import only",
         importSubpath: "import feature",
         importAlias: "import alias",
         dualAlias: "require alias",
         self: "self import",
         dualPackage: "require side",
-      });
-    });
+      },
+    );
   },
-  12_000,
 );
 
 test("matches native ESM import conditions, including custom flags and built-ins", () => {
@@ -392,46 +406,44 @@ test("matches native ESM import conditions, including custom flags and built-ins
   });
 }, 45_000);
 
-test.each(["cjs", "mjs"])(
+testIsolatedConsumers(
   "resolves . and .. from actual %s consumer directories",
-  (extension) => {
-    withTemporaryDirectory("import-sync-dir-consumer-", (root) => {
-      const project = join(root, "project");
-      const nested = join(project, "nested");
-      mkdirSync(nested, { recursive: true });
-      for (const [directory, source] of [
-        [project, "parent"],
-        [nested, "current"],
-      ] as const) {
-        writeFileSync(
-          join(directory, "package.json"),
-          JSON.stringify({ type: "module", main: "./entry.mjs" }),
-        );
-        writeFileSync(
-          join(directory, "entry.mjs"),
-          `export const source = ${JSON.stringify(source)};\n`,
-        );
-      }
+  "import-sync-dir-consumer-",
+  (root, extension) => {
+    const project = join(root, "project");
+    const nested = join(project, "nested");
+    mkdirSync(nested, { recursive: true });
+    for (const [directory, source] of [
+      [project, "parent"],
+      [nested, "current"],
+    ] as const) {
       writeFileSync(
-        join(project, "nested.mjs"),
-        'export const source = "wrong sibling";\n',
+        join(directory, "package.json"),
+        JSON.stringify({ type: "module", main: "./entry.mjs" }),
       );
-      const consumer = join(nested, `consumer.${extension}`);
       writeFileSync(
-        consumer,
-        `${libraryImport(extension)}const result = {
+        join(directory, "entry.mjs"),
+        `export const source = ${JSON.stringify(source)};\n`,
+      );
+    }
+    writeFileSync(
+      join(project, "nested.mjs"),
+      'export const source = "wrong sibling";\n',
+    );
+    const consumer = join(nested, `consumer.${extension}`);
+    writeFileSync(
+      consumer,
+      `${libraryImport(extension)}const result = {
   current: importSync(".").source,
   parent: importSync("..").source,
   explicit: importSync(".", { basePath: ${JSON.stringify(project)} }).source,
 };
 console.log(JSON.stringify(result));\n`,
-      );
-      expect(JSON.parse(runConsumer(consumer, root))).toEqual({
-        current: "current",
-        parent: "parent",
-        explicit: "parent",
-      });
+    );
+    expect(JSON.parse(runConsumer(consumer, root))).toEqual({
+      current: "current",
+      parent: "parent",
+      explicit: "parent",
     });
   },
-  12_000,
 );
