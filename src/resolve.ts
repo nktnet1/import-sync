@@ -134,9 +134,11 @@ const readStartupConditions = (): StartupConditions => {
 
   const captured: { conditions?: readonly string[] } = {};
   const hook = registerHooks({
-    resolve(specifier, context, nextResolve) {
+    resolve(_specifier, context) {
       captured.conditions = [...context.conditions];
-      return nextResolve(specifier, context);
+      // The only operation during this short-lived hook is our internal
+      // built-in probe. Do not pass it through user-installed resolver hooks.
+      return { url: "node:os", shortCircuit: true };
     },
   });
   try {

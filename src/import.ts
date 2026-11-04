@@ -341,9 +341,10 @@ const importSync = (id: string, options: Options = {}) => {
   let modulePath: string;
   if (isRelativePath(id)) {
     // Capture the caller here: V8 stack depth determines relative resolution.
-    const caller = options.basePath
-      ? callerFromBasePath(options.basePath)
-      : getCallerLocation();
+    const caller =
+      options.basePath !== undefined
+        ? callerFromBasePath(options.basePath)
+        : getCallerLocation();
     modulePath = resolveRelativeModule(
       id,
       options.basePath ?? path.dirname(caller.filename),
