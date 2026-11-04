@@ -7,7 +7,8 @@ export default defineConfig({
   format: "commonjs",
   platform: "node",
   outDir: "./dist",
-  dts: true,
+  // Keep the declaration source map referenced by index.d.cts in the tarball.
+  dts: { sourcemap: true },
   clean: true,
   minify: false,
   sourcemap: true,

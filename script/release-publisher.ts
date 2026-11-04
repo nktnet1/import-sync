@@ -7,6 +7,7 @@ import { styleText } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { gitExecutable, npmCliPath } from "./command.ts";
 import {
+  compareReleaseVersions,
   parseReleaseVersion,
   validateReleaseManifest,
   versionFromTag,
@@ -255,6 +256,81 @@ async function checkPublished(
   }
 }
 
+/** A prior release must never move a newer dist-tag backwards. */
+class StaleDistTagError extends Error {}
+
+export function publishedDistTagStatus(
+  expected: string,
+  actual: string | undefined,
+  distTag: "latest" | "beta",
+): "current" | "superseded" {
+  if (actual === expected) return "current";
+  if (
+    actual &&
+    parseReleaseVersion(actual).distTag === distTag &&
+    compareReleaseVersions(actual, expected) > 0
+  )
+    return "superseded";
+  throw new StaleDistTagError(
+    `npm ${distTag} dist-tag points to ${actual ?? "<missing>"}, not import-sync@${expected}; repair the dist-tag explicitly`,
+  );
+}
+
+function readPublishedDistTag(
+  context: RegistryContext,
+  distTag: "latest" | "beta",
+): string | undefined {
+  const result = spawnSync(
+    process.execPath,
+    [
+      context.npmCli,
+      "view",
+      "import-sync",
+      "dist-tags",
+      "--json",
+      "--prefer-online",
+      "--fetch-retries=0",
+      "--registry",
+      context.registry,
+    ],
+    { encoding: "utf8" },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0)
+    throw new Error(
+      `npm dist-tag lookup failed: ${result.stderr || result.stdout}`,
+    );
+  const value: unknown = JSON.parse(result.stdout);
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Invalid npm dist-tags response");
+  const tag: unknown = (value as Record<string, unknown>)[distTag];
+  if (tag !== undefined && typeof tag !== "string")
+    throw new Error(`Invalid npm ${distTag} dist-tag`);
+  return tag;
+}
+
+/** Allow time for registry metadata to catch up with an accepted publish. */
+async function verifyPublishedDistTag(
+  context: RegistryContext,
+  distTag: "latest" | "beta",
+): Promise<"current" | "superseded"> {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return publishedDistTagStatus(
+        context.version,
+        readPublishedDistTag(context, distTag),
+        distTag,
+      );
+    } catch (error) {
+      const stale = error instanceof StaleDistTagError;
+      if (attempt === 3 || (!stale && !transientError.test(String(error))))
+        throw error;
+      await setTimeout(retryDelay(attempt));
+    }
+  }
+  throw new Error("Unable to verify npm dist-tag");
+}
+
 async function confirmPublication(
   context: RegistryContext,
   artifact: ReleaseTarball,
@@ -410,12 +486,14 @@ export async function publishReleasePackage({
 
   const context = { npmCli: npmCliPath(), registry, version };
   if (await checkPublished(context, artifact)) {
+    const status = await verifyPublishedDistTag(context, distTag);
     console.log(
-      `${styleText("green", "SKIPPED")} identical import-sync@${version} already published`,
+      `${styleText("green", "SKIPPED")} identical import-sync@${version} already published${status === "superseded" ? ` (npm ${distTag} already points to a newer version)` : ""}`,
     );
     return;
   }
   await publishWithRecovery(context, artifact, distTag);
+  await verifyPublishedDistTag(context, distTag);
   console.log(
     `${styleText("green", "PUBLISHED")} import-sync@${version} (${distTag})`,
   );

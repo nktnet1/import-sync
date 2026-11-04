@@ -23,6 +23,19 @@ test("every declared package entry points to a built file", () => {
   }
 });
 
+test("the generated declaration references a source map that is packaged", () => {
+  const declarations = readFileSync(
+    resolve(projectRoot, "dist/index.d.cts"),
+    "utf8",
+  );
+  const reference = /^\/\/# sourceMappingURL=(.+)$/m.exec(declarations);
+  expect(reference?.[1]).toBe("index.d.cts.map");
+  const mapping = JSON.parse(
+    readFileSync(resolve(projectRoot, "dist", reference?.[1] ?? ""), "utf8"),
+  ) as { version: number; file: string };
+  expect(mapping).toMatchObject({ version: 3, file: "index.d.cts" });
+});
+
 test("maps private #/ specifiers to source files", () => {
   const pkg = JSON.parse(
     readFileSync(resolve(projectRoot, "package.json"), "utf8"),

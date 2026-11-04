@@ -86,6 +86,13 @@ publish failures are checked against the registry before retrying. Retry a
 failed Publish job using the same uploaded artifact, rather than rebuilding
 an already-published version.
 
+Publication also verifies the expected npm `latest` or `beta` dist-tag, including
+when an identical tarball was previously published. If the tag is missing or
+still points to an older version, the job fails rather than reporting success;
+correct the tag explicitly. npm trusted publishing needs the separately opt-in
+**Allow npm dist-tag** permission for OIDC-based tag changes. A rerun of an older
+release will not downgrade a tag that already points to a newer version.
+
 ## Registry tests and hooks
 
 `pnpm test:verdaccio` starts the pinned Verdaccio development dependency on an

@@ -39,6 +39,19 @@ export function compareReleaseBases(left: string, right: string): number {
   return 0;
 }
 
+/** Compare supported stable/beta versions without floating-point coercion. */
+export function compareReleaseVersions(left: string, right: string): number {
+  const first = parseReleaseVersion(left);
+  const second = parseReleaseVersion(right);
+  const baseComparison = compareReleaseBases(first.base, second.base);
+  if (baseComparison !== 0) return baseComparison;
+  if (first.beta === undefined) return second.beta === undefined ? 0 : 1;
+  if (second.beta === undefined) return -1;
+  const firstBeta = BigInt(first.beta);
+  const secondBeta = BigInt(second.beta);
+  return firstBeta > secondBeta ? 1 : firstBeta < secondBeta ? -1 : 0;
+}
+
 function knownReleases(versions: readonly string[]): ReleaseVersion[] {
   return versions.flatMap((version) => {
     try {
