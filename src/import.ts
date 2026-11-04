@@ -10,9 +10,10 @@ import {
   findRelativeModuleFile,
   getCallerDirname,
   isRelativePath,
+  MissingModuleFileError,
 } from "#/files.ts";
 import { Options } from "#/options.ts";
-import { resolvePackageId } from "#/resolve.ts";
+import { getStartupRequireConditions, resolvePackageId } from "#/resolve.ts";
 
 /**
  * Returns an ESM-imported module
@@ -67,25 +68,119 @@ const isEmptyObject = (value: unknown): boolean => {
   );
 };
 
+/** Use Node's ESM resolver with the consumer's directory as the parent. */
+const resolveNativeImportFrom = (id: string, callerDirname: string): string => {
+  // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
+  const { resolveImportFrom } = require(
+    path.join(__dirname, "native-resolve.mjs"),
+  ) as {
+    resolveImportFrom: (id: string, parentURL: string) => string;
+  };
+  return resolveImportFrom(
+    id,
+    pathToFileURL(path.join(callerDirname, "__import_sync__.cjs")).href,
+  );
+};
+
+/** Check redirects of an existing package on Node 22, whose require.resolve ignores hooks. */
+/* v8 ignore start -- @preserve: Node 22-only behaviour is tested with real CJS and ESM consumers. */
+const resolveNode22PackageOverride = (
+  id: string,
+  callerDirname: string,
+  resolved: string,
+): string => {
+  /* v8 ignore next 2 -- @preserve: only Node 22 lacks hook-aware require.resolve. */
+  if (!process.versions.node.startsWith("22.") || !path.isAbsolute(resolved)) {
+    return resolved;
+  }
+
+  // Do not swallow hook errors. A resolver may deliberately prohibit the
+  // package even when a file exists at the require.resolve result.
+  // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
+  const { resolveRequireFrom } = require(
+    path.join(__dirname, "native-resolve.mjs"),
+  ) as {
+    resolveRequireFrom: (
+      id: string,
+      parentURL: string,
+      conditions: string[],
+    ) => string;
+  };
+  const candidate = resolveRequireFrom(
+    id,
+    pathToFileURL(path.join(callerDirname, "__import_sync__.cjs")).href,
+    getStartupRequireConditions(),
+  );
+  if (!isFileURL(candidate)) return candidate;
+  try {
+    const nativeURL = new URL(candidate);
+    if (realpathSync(fileURLToPath(nativeURL)) !== realpathSync(resolved)) {
+      return candidate;
+    }
+  } catch {
+    // A load hook might provide a virtual module with no filesystem backing.
+    return candidate;
+  }
+  return resolved;
+};
+/* v8 ignore stop -- @preserve */
+
 /** Resolve consumer package exports without resolving from import-sync itself. */
 const resolveConsumerPackage = (id: string, callerDirname: string): string => {
   const callerFile = path.join(callerDirname, "__import_sync__.cjs");
-  return resolvePackageId(
+  const resolved = resolvePackageId(
     id,
     createRequire(callerFile).resolve,
     process.features.require_module
-      ? () => {
-          // The native ESM helper is distributed alongside index.cjs.
-          // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
-          const { resolveImportFrom } = require(
-            path.join(__dirname, "native-resolve.mjs"),
-          ) as {
-            resolveImportFrom: (id: string, parentURL: string) => string;
-          };
-          return resolveImportFrom(id, pathToFileURL(callerFile).href);
-        }
+      ? () => resolveNativeImportFrom(id, callerDirname)
       : undefined,
   );
+  return process.features.require_module
+    ? resolveNode22PackageOverride(id, callerDirname, resolved)
+    : resolved;
+};
+
+/** Resolve redirects installed by Node's synchronous hooks, retaining path rules. */
+const resolveRelativeModule = (id: string, basePath: string): string => {
+  const resolveLegacy = () => findRelativeModuleFile(basePath, id);
+  if (!process.features.require_module) return resolveLegacy();
+
+  // Literal filesystem names beat the URL interpretation of ?, # and %.
+  if (
+    /[?#%]/.test(id) &&
+    statSync(path.resolve(basePath, id), { throwIfNoEntry: false })?.isFile()
+  ) {
+    return resolveLegacy();
+  }
+
+  const native = resolveNativeImportFrom(id, basePath);
+  if (!isFileURL(native)) return native;
+
+  const nativePath = fileURLToPath(native);
+  if (!statSync(nativePath, { throwIfNoEntry: false })?.isFile()) {
+    return resolveLegacy();
+  }
+
+  let legacy: string;
+  try {
+    legacy = resolveLegacy();
+  } catch (error) {
+    if (error instanceof MissingModuleFileError) return native;
+    throw error;
+  }
+
+  const legacyURL = new URL(
+    isFileURL(legacy) ? legacy : pathToFileURL(legacy).href,
+  );
+  const nativeURL = new URL(native);
+  if (
+    realpathSync(fileURLToPath(legacyURL)) === realpathSync(nativePath) &&
+    legacyURL.search === nativeURL.search &&
+    legacyURL.hash === nativeURL.hash
+  ) {
+    return legacy;
+  }
+  return native;
 };
 
 /** Match relative extension discovery for plain absolute filesystem paths. */
@@ -167,9 +262,9 @@ const importSync = (id: string, options: Options = {}) => {
   if (isRelativePath(id)) {
     // Resolve caller context here rather than from a helper: V8 stack depth is
     // part of getCallerDirname's existing contract.
-    modulePath = findRelativeModuleFile(
-      options.basePath ?? getCallerDirname(),
+    modulePath = resolveRelativeModule(
       id,
+      options.basePath ?? getCallerDirname(),
     );
   } else if (path.isAbsolute(id)) {
     modulePath = findAbsoluteModulePath(id);

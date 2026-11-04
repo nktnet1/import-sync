@@ -1,5 +1,5 @@
-import { realpathSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import fs, { realpathSync, writeFileSync } from "node:fs";
+import { createRequire, registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -329,4 +329,108 @@ test("preserves import diagnostics even when options cannot be JSON serialized",
   expect(() => importSync("node:fs", options)).toThrow(
     /Failed to import from:[\s\S]*node:fs[\s\S]*\[unserializable options\][\s\S]*original loader failure/,
   );
+});
+
+test.each([
+  { name: "existing", exists: true },
+  { name: "virtual", exists: false },
+])(
+  "forwards $name relative resolver hook redirects to the loader",
+  ({ exists }) => {
+    withTemporaryDirectory("import-sync-hooked-relative-unit-", (root) => {
+      const original = join(root, exists ? "existing.mjs" : "virtual.mjs");
+      const redirected = join(root, "redirected.mjs");
+      if (exists) writeFileSync(original, "export const source = 'original';");
+      writeFileSync(redirected, "export const source = 'redirected';");
+
+      const hook = registerHooks({
+        resolve(id, context, nextResolve) {
+          if (id === (exists ? "./existing.mjs" : "./virtual.mjs")) {
+            return { url: pathToFileURL(redirected).href, shortCircuit: true };
+          }
+          return nextResolve(id, context);
+        },
+      });
+      try {
+        const value = { sentinel: "hooked" };
+        mocks.load.mockReturnValue(value);
+        expect(
+          importSync(`./${exists ? "existing" : "virtual"}.mjs`, {
+            basePath: root,
+          }),
+        ).toBe(value);
+        expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+          pathToFileURL(redirected).href,
+        );
+      } finally {
+        hook.deregister();
+      }
+    });
+  },
+);
+
+test("does not swallow unrelated filesystem errors after resolving a hook redirect", () => {
+  withTemporaryDirectory("import-sync-hook-permission-", (root) => {
+    const redirected = join(root, "redirected.mjs");
+    writeFileSync(redirected, "export const source = 'redirected';");
+    const permissionError = Object.assign(new Error("permission denied"), {
+      code: "EACCES",
+    });
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "./virtual.mjs")
+          return { url: pathToFileURL(redirected).href, shortCircuit: true };
+        return nextResolve(id, context);
+      },
+    });
+    const originalStat = fs.statSync;
+    const stat = vi
+      .spyOn(fs, "statSync")
+      .mockImplementation((filename, options) => {
+        if (String(filename) === join(root, "virtual.mjs"))
+          throw permissionError;
+        return originalStat(filename, options);
+      });
+    try {
+      expect(() => importSync("./virtual.mjs", { basePath: root })).toThrow(
+        permissionError,
+      );
+      expect(mocks.load).not.toHaveBeenCalled();
+    } finally {
+      stat.mockRestore();
+      hook.deregister();
+    }
+  });
+});
+
+test("keeps legacy extension discovery when native require(esm) is unavailable", () => {
+  const nativeSupport = vi
+    .spyOn(process.features, "require_module", "get")
+    .mockReturnValue(false);
+  try {
+    expectBasicModuleResolution("./basic");
+  } finally {
+    nativeSupport.mockRestore();
+  }
+});
+
+test("forwards a relative resolver-hook redirect to a builtin", () => {
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "./virtual.mjs") {
+        return { url: "node:os", shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const value = { sentinel: true };
+    mocks.load.mockReturnValue(value);
+    expect(importSync("./virtual.mjs", { basePath: basicDirectory })).toBe(
+      value,
+    );
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith("node:os");
+  } finally {
+    hook.deregister();
+  }
 });

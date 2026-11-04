@@ -83,7 +83,7 @@ export const getCallerDirname = (): string => {
   }
 };
 
-class MissingModuleFileError extends Error {}
+export class MissingModuleFileError extends Error {}
 
 /**
  * Find the module file path by checking for available extensions

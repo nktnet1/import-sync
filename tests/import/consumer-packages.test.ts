@@ -766,3 +766,164 @@ testIsolatedConsumers(
     }
   },
 );
+
+testIsolatedConsumers(
+  "honours relative resolver-hook redirects for existing and virtual paths in %s consumers",
+  "import-sync-hooked-relative-",
+  (root, extension) => {
+    writeFileSync(
+      join(root, "existing.mjs"),
+      'export const value = "existing";\n',
+    );
+    writeFileSync(
+      join(root, "replacement.mjs"),
+      'export const value = "redirected";\n',
+    );
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = await import("node:module");
+  const { pathToFileURL } = await import("node:url");
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "./existing.mjs" || id === "./virtual.mjs") {
+        return { url: pathToFileURL(${JSON.stringify(join(root, "replacement.mjs"))}).href, shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const imported = [importSync("./existing.mjs"), importSync("./virtual.mjs")];
+    const native = await Promise.all([import("./existing.mjs"), import("./virtual.mjs")]);
+    console.log(JSON.stringify({ values: imported.map((mod) => mod.value), identical: imported[0] === imported[1], native: native.map((mod) => mod.value) }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      {
+        values: ["redirected", "redirected"],
+        identical: true,
+        native: ["redirected", "redirected"],
+      },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "honours resolver-hook redirects for installed dual-export packages in %s consumers",
+  "import-sync-hooked-package-",
+  (root, extension) => {
+    writeIsolatedPackage(
+      root,
+      "hooked-package",
+      {
+        name: "hooked-package",
+        exports: { require: "./entry.cjs", import: "./entry.mjs" },
+      },
+      {
+        "entry.cjs": 'module.exports = { value: "require" };\n',
+        "entry.mjs": 'export const value = "import";\n',
+      },
+    );
+    writeFileSync(
+      join(root, "replacement.mjs"),
+      'export const value = "redirected";\n',
+    );
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = await import("node:module");
+  const { pathToFileURL } = await import("node:url");
+  const baseline = importSync("hooked-package").value;
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "hooked-package") {
+        return { url: pathToFileURL(${JSON.stringify(join(root, "replacement.mjs"))}).href, shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const imported = importSync("hooked-package");
+    const native = await import("hooked-package");
+    console.log(JSON.stringify({ baseline, imported: imported.value, native: native.value }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      { baseline: "require", imported: "redirected", native: "redirected" },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "does not bypass blocked relative imports from %s consumers",
+  "import-sync-hook-block-",
+  (root, extension) => {
+    writeFileSync(
+      join(root, "blocked.mjs"),
+      'export const value = "unsafe";\n',
+    );
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = await import("node:module");
+  const hook = registerHooks({ resolve(id, context, nextResolve) {
+    if (id === "./blocked.mjs") {
+      const error = new Error("blocked by module policy");
+      error.code = "ERR_BLOCKED_BY_HOOK";
+      throw error;
+    }
+    return nextResolve(id, context);
+  }});
+  try {
+    let imported;
+    try { importSync("./blocked.mjs"); imported = "unblocked"; }
+    catch (error) { imported = error.code; }
+    let native;
+    try { await import("./blocked.mjs"); native = "unblocked"; }
+    catch (error) { native = error.code; }
+    console.log(JSON.stringify({ imported, native }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      { imported: "ERR_BLOCKED_BY_HOOK", native: "ERR_BLOCKED_BY_HOOK" },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "does not bypass a resolver-hook rejection of an installed package from %s consumers",
+  "import-sync-hook-block-package-",
+  (root, extension) => {
+    writeIsolatedPackage(
+      root,
+      "blocked-package",
+      { name: "blocked-package", main: "./index.cjs" },
+      { "index.cjs": 'module.exports = { value: "unsafe" };\n' },
+    );
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = await import("node:module");
+  const hook = registerHooks({ resolve(id, context, nextResolve) {
+    if (id === "blocked-package") {
+      const error = new Error("package blocked by module policy");
+      error.code = "ERR_BLOCKED_BY_HOOK";
+      throw error;
+    }
+    return nextResolve(id, context);
+  }});
+  try {
+    let imported;
+    try { importSync("blocked-package"); imported = "unblocked"; }
+    catch (error) { imported = error.code; }
+    let native;
+    try { await import("blocked-package"); native = "unblocked"; }
+    catch (error) { native = error.code; }
+    console.log(JSON.stringify({ imported, native }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      { imported: "ERR_BLOCKED_BY_HOOK", native: "ERR_BLOCKED_BY_HOOK" },
+    );
+  },
+);

@@ -12,6 +12,7 @@ import { expect, test, vi } from "vitest";
 import {
   deriveImportConditions,
   getImportConditions,
+  getStartupRequireConditions,
   resolvePackageId,
 } from "#/resolve.ts";
 
@@ -263,4 +264,11 @@ test("uses Node's native matching for import-only exports, subpaths, and aliases
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("exposes native require conditions captured at startup", () => {
+  const conditions = getStartupRequireConditions();
+  expect(conditions).toContain("require");
+  expect(conditions).toContain("node");
+  expect(conditions).toContain("module-sync");
 });

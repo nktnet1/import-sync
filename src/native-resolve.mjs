@@ -1,16 +1,15 @@
 import { registerHooks } from "node:module";
 
-/** Resolve ESM package exports from the consumer's location, retaining URL suffixes. */
-export function resolveImportFrom(specifier, parentURL) {
-  // `import.meta.resolve` is synchronous but normally resolves relative to this
-  // helper. Retarget only the requested specifier, preserving native ESM
-  // conditions and any resolver hooks installed by the application.
+/** Resolve using the consumer's package scope and optional Node conditions. */
+function resolveFrom(specifier, parentURL, conditions) {
   const hook = registerHooks({
     resolve(id, context, nextResolve) {
-      return nextResolve(
-        id,
-        id === specifier ? { ...context, parentURL } : context,
-      );
+      if (id !== specifier) return nextResolve(id, context);
+      return nextResolve(id, {
+        ...context,
+        parentURL,
+        ...(conditions ? { conditions } : {}),
+      });
     },
   });
   try {
@@ -18,4 +17,14 @@ export function resolveImportFrom(specifier, parentURL) {
   } finally {
     hook.deregister();
   }
+}
+
+/** Resolve ESM package exports in the caller's scope, retaining URL suffixes. */
+export function resolveImportFrom(specifier, parentURL) {
+  return resolveFrom(specifier, parentURL);
+}
+
+/** Resolve require-first conditions through Node's hook-aware ESM resolver. */
+export function resolveRequireFrom(specifier, parentURL, conditions) {
+  return resolveFrom(specifier, parentURL, conditions);
 }

@@ -117,9 +117,20 @@ export const deriveImportConditions = (
  * the resolver's condition list is not affected by those edits. The synchronous
  * hook API is available on Node 22.15+; older runtimes retain flag parsing.
  */
-const readStartupImportConditions = (): Set<string> => {
-  /* v8 ignore next -- @preserve: compatibility with Node before registerHooks. */
-  if (typeof registerHooks !== "function") return getImportConditions();
+type StartupConditions = {
+  import: Set<string>;
+  require: Set<string>;
+};
+
+const readStartupConditions = (): StartupConditions => {
+  /* v8 ignore next 7 -- @preserve: compatibility with Node before registerHooks. */
+  if (typeof registerHooks !== "function") {
+    const importConditions = getImportConditions();
+    const requireConditions = new Set(importConditions);
+    requireConditions.delete("import");
+    requireConditions.add("require");
+    return { import: importConditions, require: requireConditions };
+  }
 
   const captured: { conditions?: readonly string[] } = {};
   const hook = registerHooks({
@@ -138,11 +149,18 @@ const readStartupImportConditions = (): Set<string> => {
   if (!captured.conditions)
     throw new Error("Unable to determine native module conditions");
 
-  return deriveImportConditions(captured.conditions);
+  return {
+    import: deriveImportConditions(captured.conditions),
+    require: new Set(captured.conditions),
+  };
 };
 
 // Snapshot the real process-start conditions, not mutable runtime flags.
-const startupImportConditions = readStartupImportConditions();
+const startupConditions = readStartupConditions();
+const startupImportConditions = startupConditions.import;
+export const getStartupRequireConditions = (): string[] => [
+  ...startupConditions.require,
+];
 
 /** Prefer the existing require entry point; fall back only for missing conditions. */
 export const resolvePackageId = (
