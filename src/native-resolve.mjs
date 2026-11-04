@@ -1,15 +1,11 @@
-import { registerHooks } from "node:module";
+import { createRequire, registerHooks } from "node:module";
 
 /** Resolve using the consumer's package scope and optional Node conditions. */
-function resolveFrom(specifier, parentURL, conditions) {
+function resolveFrom(specifier, parentURL) {
   const hook = registerHooks({
     resolve(id, context, nextResolve) {
       if (id !== specifier) return nextResolve(id, context);
-      return nextResolve(id, {
-        ...context,
-        parentURL,
-        ...(conditions ? { conditions } : {}),
-      });
+      return nextResolve(id, { ...context, parentURL });
     },
   });
   try {
@@ -24,7 +20,34 @@ export function resolveImportFrom(specifier, parentURL) {
   return resolveFrom(specifier, parentURL);
 }
 
-/** Resolve require-first conditions through Node's hook-aware ESM resolver. */
-export function resolveRequireFrom(specifier, parentURL, conditions) {
-  return resolveFrom(specifier, parentURL, conditions);
+/** Resolve require conditions without poisoning the native ESM resolution cache. */
+let requireProbeIndex = 0;
+export function resolveRequireFrom(specifier, parentURL) {
+  // Use a fresh, never-loaded specifier so require() invokes the resolver even
+  // when the real package is already cached. The temporary hook resolves the
+  // requested id, then aborts before executing its module body.
+  const probe = `./.__import_sync_require_probe_${++requireProbeIndex}.cjs`;
+  const stopped = Symbol("import-sync require resolution captured");
+  let resolved;
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id !== probe) return nextResolve(id, context);
+      resolved = nextResolve(specifier, { ...context, parentURL }).url;
+      throw stopped;
+    },
+  });
+  try {
+    try {
+      createRequire(parentURL)(probe);
+      throw new Error("Native require resolution did not invoke the probe");
+    } catch (error) {
+      if (error !== stopped) throw error;
+    }
+  } finally {
+    hook.deregister();
+  }
+  if (typeof resolved !== "string") {
+    throw new Error("Native require resolution did not provide a URL");
+  }
+  return resolved;
 }

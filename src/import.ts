@@ -15,11 +15,7 @@ import {
   toESMRelativeSpecifier,
 } from "#/files.ts";
 import { Options } from "#/options.ts";
-import {
-  getStartupRequireConditions,
-  resolvePackageId,
-  supportsNativeResolverHooks,
-} from "#/resolve.ts";
+import { resolvePackageId, supportsNativeResolverHooks } from "#/resolve.ts";
 
 /**
  * Returns an ESM-imported module
@@ -91,60 +87,28 @@ const resolveNativeRequireFrom = (id: string, parentURL: string): string => {
   const { resolveRequireFrom } = require(
     path.join(__dirname, "native-resolve.mjs"),
   ) as {
-    resolveRequireFrom: (
-      id: string,
-      parentURL: string,
-      conditions: string[],
-    ) => string;
+    resolveRequireFrom: (id: string, parentURL: string) => string;
   };
-  return resolveRequireFrom(id, parentURL, getStartupRequireConditions());
-};
-
-/** Preserve hook redirects (including queries) that require.resolve loses. */
-const resolvePackageOverride = (
-  id: string,
-  parentURL: string,
-  resolved: string,
-): string => {
-  // require.resolve can collapse a hooked file URL onto its filesystem path,
-  // silently discarding a query or fragment even on current Node versions.
-  const candidate = resolveNativeRequireFrom(id, parentURL);
-  if (!isFileURL(candidate) || !path.isAbsolute(resolved)) return candidate;
-  // A hook may intentionally select a symlink alias of the same real file.
-  // Compare URL spelling instead of treating every realpath alias as identical.
-  if (candidate !== pathToFileURL(resolved).href) return candidate;
-  try {
-    // A hook can also return a virtual file URL that has no disk entry. Keep
-    // that URL rather than replacing it with require.resolve's path spelling.
-    realpathSync(resolved);
-    return resolved;
-  } catch {
-    return candidate;
-  }
+  return resolveRequireFrom(id, parentURL);
 };
 
 /** Resolve consumer package exports without resolving from import-sync itself. */
 const resolveConsumerPackage = (id: string, caller: CallerLocation): string => {
   const useNativeResolver = supportsNativeResolverHooks();
-  // Node's createRequire().resolve() strips queries and fragments from the
-  // parent file URL. For ESM callers with a suffix, use native resolution with
-  // require conditions so user hooks still receive the real parent URL.
-  const resolveRequire =
-    useNativeResolver &&
-    caller.parentURL !== pathToFileURL(caller.filename).href
-      ? (specifier: string) =>
-          resolveNativeRequireFrom(specifier, caller.parentURL)
-      : createRequire(caller.filename).resolve;
-  const resolved = resolvePackageId(
+  // Probe require conditions through the actual CommonJS resolver. Passing
+  // require conditions to import.meta.resolve instead contaminates Node's
+  // import-resolution cache for this caller and package.
+  const resolveRequire = useNativeResolver
+    ? (specifier: string) =>
+        resolveNativeRequireFrom(specifier, caller.parentURL)
+    : createRequire(caller.filename).resolve;
+  return resolvePackageId(
     id,
     resolveRequire,
     useNativeResolver
       ? () => resolveNativeImportFrom(id, caller.parentURL)
       : undefined,
   );
-  return useNativeResolver
-    ? resolvePackageOverride(id, caller.parentURL, resolved)
-    : resolved;
 };
 
 /** Whether native URL resolution selected the unmodified relative specifier. */

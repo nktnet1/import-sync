@@ -49,7 +49,7 @@ test("resolves bare package IDs from the caller and forwards ESM options", () =>
 
   expect(importSync("node-fetch", { esmOptions })).toBe(value);
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
-    createRequire(import.meta.url).resolve("node-fetch"),
+    pathToFileURL(createRequire(import.meta.url).resolve("node-fetch")).href,
   );
   expect(mocks.factory).toHaveBeenCalledExactlyOnceWith(
     expect.anything(),
@@ -63,7 +63,7 @@ test("ignores basePath when resolving a package ID", () => {
 
   expect(importSync("node-fetch", { basePath: "/ignored" })).toBe(value);
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
-    createRequire(import.meta.url).resolve("node-fetch"),
+    pathToFileURL(createRequire(import.meta.url).resolve("node-fetch")).href,
   );
 });
 

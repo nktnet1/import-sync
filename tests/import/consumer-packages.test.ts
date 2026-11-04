@@ -1235,3 +1235,90 @@ test.skipIf(process.platform === "win32").each(["cjs", "mjs"])(
   },
   12_000,
 );
+
+/** Require-first package resolution must never poison Node's import cache. */
+testIsolatedConsumers(
+  "keeps native import and require-condition package caches separate in %s consumers",
+  "import-sync-condition-cache-",
+  (root, extension) => {
+    for (const name of ["native-first-package", "wrapper-first-package"]) {
+      writeIsolatedPackage(
+        root,
+        name,
+        {
+          name,
+          type: "module",
+          exports: { require: "./require.cjs", import: "./import.mjs" },
+        },
+        {
+          "require.cjs": 'module.exports = { selected: "require" };\n',
+          "import.mjs": 'export const selected = "import";\n',
+        },
+      );
+    }
+    expectConsumerResult(
+      root,
+      extension,
+      `void (async () => {
+  const nativeFirst = (await import("native-first-package")).selected;
+  const wrapperAfterNative = importSync("native-first-package").selected;
+  const nativeAgain = (await import("native-first-package")).selected;
+  const wrapperFirst = importSync("wrapper-first-package").selected;
+  const nativeAfterWrapper = (await import("wrapper-first-package")).selected;
+  console.log(JSON.stringify({
+    nativeFirst, wrapperAfterNative, nativeAgain, wrapperFirst, nativeAfterWrapper,
+  }));
+})();
+`,
+      {
+        nativeFirst: "import",
+        wrapperAfterNative: "require",
+        nativeAgain: "import",
+        wrapperFirst: "require",
+        nativeAfterWrapper: "import",
+      },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "resolves a hook-controlled package only once in %s consumers",
+  "import-sync-hook-once-",
+  (root, extension) => {
+    writeIsolatedPackage(
+      root,
+      "hook-once-package",
+      { name: "hook-once-package", main: "entry.cjs" },
+      { "entry.cjs": 'module.exports = { selected: "original" };\n' },
+    );
+    const redirected = join(root, "redirected.cjs");
+    writeFileSync(redirected, 'module.exports = { selected: "redirected" };\n');
+    const moduleLoader =
+      extension === "mjs"
+        ? 'await import("node:module")'
+        : 'require("node:module")';
+    expectConsumerResult(
+      root,
+      extension,
+      `void (async () => {
+  const { registerHooks } = ${moduleLoader};
+  let calls = 0;
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "hook-once-package") {
+        calls += 1;
+        return { url: ${JSON.stringify(pathToFileURL(redirected).href)}, shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const selected = importSync("hook-once-package").selected;
+    console.log(JSON.stringify({ selected, calls }));
+  } finally { hook.deregister(); }
+})();
+`,
+      { selected: "redirected", calls: 1 },
+    );
+  },
+);
