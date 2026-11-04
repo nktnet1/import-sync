@@ -1,4 +1,6 @@
+import { resolve } from "node:path";
 import { defineConfig } from "tsdown";
+import { emitDeclarations } from "./script/emit-declarations.ts";
 
 export default defineConfig({
   entry: "./src/index.ts",
@@ -7,11 +9,13 @@ export default defineConfig({
   format: "commonjs",
   platform: "node",
   outDir: "./dist",
-  // Keep the declaration source map referenced by index.d.cts in the tarball.
+  // Preserve ESM declaration source maps and provide a correct CJS type facade.
   dts: { sourcemap: true },
+  onSuccess: (config) => emitDeclarations(resolve(config.cwd, config.outDir)),
   clean: true,
   minify: false,
   sourcemap: true,
-  exports: true,
+  // The package has type-specific export conditions; keep them authored in package.json.
+  exports: false,
   cjsDefault: true,
 });

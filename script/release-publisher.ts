@@ -91,8 +91,31 @@ function validTarFooter(archive: Buffer, offset: number): boolean {
   );
 }
 
-function requireReleaseEntries(entries: ReadonlyMap<string, number>): void {
-  for (const name of ["package/dist/index.cjs", "package/dist/index.d.cts"]) {
+function requireReleaseEntries(
+  entries: ReadonlyMap<string, number>,
+  manifest: Record<string, unknown>,
+): void {
+  const required = ["package/dist/index.cjs", "package/dist/index.d.cts"];
+  // An older release may be retried by today's trusted Publish workflow. Only
+  // require the new ESM declarations when the tarball's manifest advertises them.
+  const exportsValue = manifest.exports;
+  const rootExport =
+    exportsValue && typeof exportsValue === "object" && "." in exportsValue
+      ? exportsValue["."]
+      : undefined;
+  const types =
+    rootExport && typeof rootExport === "object" && "types" in rootExport
+      ? rootExport.types
+      : undefined;
+  if (
+    types &&
+    typeof types === "object" &&
+    "import" in types &&
+    types.import === "./dist/index.d.mts"
+  ) {
+    required.push("package/dist/index.d.mts", "package/dist/index.d.mts.map");
+  }
+  for (const name of required) {
     if (!entries.has(name) || entries.get(name) === 0)
       throw new Error(`Missing or empty release tarball member: ${name}`);
   }
@@ -125,7 +148,7 @@ export function inspectReleaseTarball(file: string): ReleaseTarball {
   }
   if (!footer) throw new Error("Missing or invalid tar footer");
   if (!manifest) throw new Error("Release tarball is missing package.json");
-  requireReleaseEntries(entries);
+  requireReleaseEntries(entries, manifest);
   if (manifest.scripts !== undefined)
     throw new Error("Release tarball has unexpected lifecycle scripts");
   return { file, manifest };

@@ -70,9 +70,11 @@ the upstream release. The publishing job continues to use `Production`.
 
 Packaging builds `dist`, stages the runtime and declarations alongside the
 README and licence, and removes development dependencies and lifecycle hooks.
-Both CommonJS and ESM consumers use `dist/index.cjs`; the manifest does not
-advertise an unbuilt ESM entry. The staged package is packed once without
-running lifecycle scripts and uploaded with the release tag and commit SHA.
+Both CommonJS and ESM runtime consumers use `dist/index.cjs`; the manifest does
+not advertise an unbuilt ESM JavaScript entry. TypeScript consumers instead
+resolve separate `.d.cts` (CommonJS) and `.d.mts` (ESM) declarations, with an
+included source map for the ESM declaration. The staged package is packed once
+without running lifecycle scripts and uploaded with the release tag and commit SHA.
 
 The separate **Publish** workflow checks out trusted publication code from
 the default-branch workflow revision. It downloads that tarball, verifies its

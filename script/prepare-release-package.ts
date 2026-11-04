@@ -41,7 +41,12 @@ export function prepareReleasePackage({
   )
     throw new Error('Expected package.json files to contain only "dist"');
 
-  const requiredFiles = ["dist/index.cjs", "dist/index.d.cts"];
+  const requiredFiles = [
+    "dist/index.cjs",
+    "dist/index.d.cts",
+    "dist/index.d.mts",
+    "dist/index.d.mts.map",
+  ];
   for (const name of requiredFiles) {
     const source = join(canonicalRoot, name);
     const stats = lstatSync(source, { throwIfNoEntry: false });
@@ -96,7 +101,13 @@ export function prepareReleasePackage({
   manifest.main = "./dist/index.cjs";
   manifest.types = "./dist/index.d.cts";
   manifest.exports = {
-    ".": { types: "./dist/index.d.cts", default: "./dist/index.cjs" },
+    ".": {
+      types: {
+        import: "./dist/index.d.mts",
+        require: "./dist/index.d.cts",
+      },
+      default: "./dist/index.cjs",
+    },
     "./package.json": "./package.json",
   };
   writeFileSync(
