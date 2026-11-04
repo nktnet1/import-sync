@@ -224,7 +224,20 @@ testIsolatedConsumers(
   const ids = ${JSON.stringify(ids)};
   const imported = ids.map((id) => importSync(id).url);
   const native = await Promise.all(ids.map(async (id) => (await import(id)).url));
-  console.log(JSON.stringify({ identical: imported.every((url, index) => url === native[index]), suffixes: imported.map((url) => new URL(url).search + new URL(url).hash) }));
+  const { realpathSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  // Windows may spell the same file with different drive-letter casing or
+  // short/long path aliases. Compare canonical files and exact URL suffixes.
+  const matches = (actual, expected) => {
+    const actualURL = new URL(actual);
+    const expectedURL = new URL(expected);
+    return realpathSync.native(fileURLToPath(actualURL)) === realpathSync.native(fileURLToPath(expectedURL))
+      && actualURL.search === expectedURL.search
+      && actualURL.hash === expectedURL.hash;
+  };
+  const mismatches = imported.flatMap((url, index) => matches(url, native[index])
+    ? [] : [{ id: ids[index], imported: url, native: native[index] }]);
+  console.log(JSON.stringify({ identical: mismatches.length === 0, suffixes: imported.map((url) => new URL(url).search + new URL(url).hash), ...(mismatches.length ? { mismatches } : {}) }));
 })().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
       {
         identical: true,

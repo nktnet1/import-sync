@@ -68,14 +68,24 @@ test("preserves literal file paths containing special URL characters", () => {
   });
 });
 
-test.each([
+const literalCollisionCases = [
   { literal: "literal%20space.mjs", decoded: "literal space.mjs" },
   { literal: "literal%23hash.mjs", decoded: "literal#hash.mjs" },
   { literal: "literal%3Fquery.mjs", decoded: "literal?query.mjs" },
   { literal: "literal%2Efile.mjs", decoded: "literal.file.mjs" },
   { literal: "literal?query.mjs", decoded: "literal" },
   { literal: "literal#hash.mjs", decoded: "literal" },
-])(
+];
+
+// '?' is not a legal filename character on Windows; run those two filesystem
+// collisions only on platforms where both distinct files can actually exist.
+test.each(
+  literalCollisionCases.filter(
+    ({ literal, decoded }) =>
+      process.platform !== "win32" ||
+      (!literal.includes("?") && !decoded.includes("?")),
+  ),
+)(
   "does not decode a literal filename $literal into an existing different module",
   ({ literal, decoded }) => {
     withTemporaryDirectory("import-sync-literal-collision-", (root) => {

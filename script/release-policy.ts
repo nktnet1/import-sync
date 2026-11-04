@@ -49,7 +49,9 @@ export function compareReleaseVersions(left: string, right: string): number {
   if (second.beta === undefined) return -1;
   const firstBeta = BigInt(first.beta);
   const secondBeta = BigInt(second.beta);
-  return firstBeta > secondBeta ? 1 : firstBeta < secondBeta ? -1 : 0;
+  if (firstBeta > secondBeta) return 1;
+  if (firstBeta < secondBeta) return -1;
+  return 0;
 }
 
 function knownReleases(versions: readonly string[]): ReleaseVersion[] {

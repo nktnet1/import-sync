@@ -229,17 +229,19 @@ function npmErrorCode(output: string): string | undefined {
   return undefined;
 }
 
-function alreadyPublished(
+/** Keep npm view flags and execution errors consistent for registry lookups. */
+function npmView(
   context: RegistryContext,
-  artifact: ReleaseTarball,
-): boolean {
+  packageName: string,
+  field: "dist.integrity" | "dist-tags",
+) {
   const result = spawnSync(
     process.execPath,
     [
       context.npmCli,
       "view",
-      `import-sync@${context.version}`,
-      "dist.integrity",
+      packageName,
+      field,
       "--json",
       "--prefer-online",
       "--fetch-retries=0",
@@ -249,6 +251,18 @@ function alreadyPublished(
     { encoding: "utf8" },
   );
   if (result.error) throw result.error;
+  return result;
+}
+
+function alreadyPublished(
+  context: RegistryContext,
+  artifact: ReleaseTarball,
+): boolean {
+  const result = npmView(
+    context,
+    `import-sync@${context.version}`,
+    "dist.integrity",
+  );
   if (result.status !== 0) {
     if (npmErrorCode(result.stdout || result.stderr) === "E404") return false;
     throw new Error(`npm view failed: ${result.stderr || result.stdout}`);
@@ -318,22 +332,7 @@ function readPublishedDistTag(
   context: RegistryContext,
   distTag: "latest" | "beta",
 ): string | undefined {
-  const result = spawnSync(
-    process.execPath,
-    [
-      context.npmCli,
-      "view",
-      "import-sync",
-      "dist-tags",
-      "--json",
-      "--prefer-online",
-      "--fetch-retries=0",
-      "--registry",
-      context.registry,
-    ],
-    { encoding: "utf8" },
-  );
-  if (result.error) throw result.error;
+  const result = npmView(context, "import-sync", "dist-tags");
   // E404 means the package has never been published. Other errors fail closed.
   if (result.status !== 0) {
     if (npmErrorCode(result.stdout || result.stderr) === "E404")
@@ -376,22 +375,21 @@ async function verifyPrepublicationDistTag(
 async function verifyPublishedDistTag(
   context: RegistryContext,
   distTag: "latest" | "beta",
+  attempt = 1,
 ): Promise<"current" | "superseded"> {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      return publishedDistTagStatus(
-        context.version,
-        readPublishedDistTag(context, distTag),
-        distTag,
-      );
-    } catch (error) {
-      const stale = error instanceof StaleDistTagError;
-      if (attempt === 3 || (!stale && !transientError.test(String(error))))
-        throw error;
-      await setTimeout(retryDelay(attempt));
-    }
+  try {
+    return publishedDistTagStatus(
+      context.version,
+      readPublishedDistTag(context, distTag),
+      distTag,
+    );
+  } catch (error) {
+    const stale = error instanceof StaleDistTagError;
+    if (attempt === 3 || (!stale && !transientError.test(String(error))))
+      throw error;
+    await setTimeout(retryDelay(attempt));
+    return verifyPublishedDistTag(context, distTag, attempt + 1);
   }
-  throw new Error("Unable to verify npm dist-tag");
 }
 
 async function confirmPublication(
@@ -490,6 +488,28 @@ export interface PublishOptions {
   dryRun?: boolean;
 }
 
+/** Select a requested release tag, verifying CI metadata when supplied. */
+function releaseTagFromMetadata(
+  root: string,
+  tag: string | undefined,
+  expectedSha: string | undefined,
+): string {
+  if (expectedSha) {
+    if (!/^[a-f0-9]{40}$/.test(expectedSha))
+      throw new Error("Invalid expected build SHA");
+    requireDirectory(join(root, "release-metadata"));
+    if (readMetadata(root, "sha") !== expectedSha)
+      throw new Error(
+        "Release metadata does not match the successful build SHA",
+      );
+    const releaseTag = readMetadata(root, "tag");
+    if (!releaseTag) throw new Error("Provide --tag or --expected-sha");
+    return releaseTag;
+  }
+  if (!tag) throw new Error("Provide --tag or --expected-sha");
+  return tag;
+}
+
 export async function publishReleasePackage({
   root,
   registry,
@@ -510,18 +530,7 @@ export async function publishReleasePackage({
     throw new Error("Use --tag or --expected-sha, not both");
 
   const canonicalRoot = realpathSync(root);
-  let releaseTag = tag;
-  if (expectedSha) {
-    if (!/^[a-f0-9]{40}$/.test(expectedSha))
-      throw new Error("Invalid expected build SHA");
-    requireDirectory(join(canonicalRoot, "release-metadata"));
-    if (readMetadata(canonicalRoot, "sha") !== expectedSha)
-      throw new Error(
-        "Release metadata does not match the successful build SHA",
-      );
-    releaseTag = readMetadata(canonicalRoot, "tag");
-  }
-  if (!releaseTag) throw new Error("Provide --tag or --expected-sha");
+  const releaseTag = releaseTagFromMetadata(canonicalRoot, tag, expectedSha);
   const { version, distTag } = versionFromTag(releaseTag);
   parseReleaseVersion(version);
   if (expectedSha) verifyRemoteTag(canonicalRoot, releaseTag, expectedSha);
@@ -550,8 +559,12 @@ export async function publishReleasePackage({
   const context = { npmCli: npmCliPath(), registry, version };
   if (await checkPublished(context, artifact)) {
     const status = await verifyPublishedDistTag(context, distTag);
+    const suffix =
+      status === "superseded"
+        ? ` (npm ${distTag} already points to a newer version)`
+        : "";
     console.log(
-      `${styleText("green", "SKIPPED")} identical import-sync@${version} already published${status === "superseded" ? ` (npm ${distTag} already points to a newer version)` : ""}`,
+      `${styleText("green", "SKIPPED")} identical import-sync@${version} already published${suffix}`,
     );
     return;
   }
