@@ -11,6 +11,8 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
+      // These are re-export/type-only entrypoints with no instrumentable logic.
+      exclude: ["src/index.ts", "src/options.ts"],
     },
   },
 });

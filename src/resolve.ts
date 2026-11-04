@@ -164,6 +164,8 @@ export const supportsNativeResolverHooks = (): boolean =>
 // Snapshot the real process-start conditions, not mutable runtime flags.
 const startupConditions = readStartupConditions();
 const startupImportConditions = startupConditions.import;
+export const getStartupImportConditions = (): Set<string> =>
+  new Set(startupImportConditions);
 export const getStartupRequireConditions = (): string[] => [
   ...startupConditions.require,
 ];
