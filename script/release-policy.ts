@@ -102,6 +102,19 @@ export function nextBetaVersion(
   ]);
   requireUnreleasedBase(base.base, existing);
 
+  // All prerelease series share the npm beta dist-tag. Creating an older beta
+  // after a newer one exists would move that tag backwards on publication.
+  for (const candidate of existing) {
+    if (
+      candidate.beta !== undefined &&
+      compareReleaseBases(candidate.base, base.base) > 0
+    ) {
+      throw new Error(
+        `A newer beta version (${candidate.version}) already exists; choose a newer base`,
+      );
+    }
+  }
+
   let highest = 0n;
   for (const candidate of [currentRelease, ...existing]) {
     if (candidate.base === base.base && candidate.beta !== undefined) {

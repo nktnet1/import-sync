@@ -31,7 +31,8 @@ From a clean checkout, preview the next beta with
 `pnpm release:beta --base 2.2.7 --dry-run`. Choose the intended stable base
 explicitly after the current stable version has already been released.
 The script checks npm's published versions and local and remote Git tags,
-then chooses the next unused numbered `-beta.N`. Omit `--base` when continuing
+rejects a base older than an existing beta series, then chooses the next unused
+numbered `-beta.N`. Omit `--base` when continuing
 an unreleased beta series already recorded in `package.json`.
 
 `pnpm release:beta --base 2.2.7` updates the version and runs Biome, both
@@ -93,7 +94,9 @@ when an identical tarball was previously published. If the tag is missing or
 still points to an older version, the job fails rather than reporting success;
 correct the tag explicitly. npm trusted publishing needs the separately opt-in
 **Allow npm dist-tag** permission for OIDC-based tag changes. A rerun of an older
-release will not downgrade a tag that already points to a newer version.
+release will not downgrade a tag that already points to a newer version. Before
+publishing a new version, the job also checks the existing tag and refuses a
+downgrade; a missing tag is allowed for the first release.
 
 ## Registry tests and hooks
 

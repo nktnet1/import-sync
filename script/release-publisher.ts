@@ -215,6 +215,20 @@ interface RegistryContext {
   version: string;
 }
 
+function npmErrorCode(output: string): string | undefined {
+  try {
+    const message: unknown = JSON.parse(output);
+    if (message && typeof message === "object" && "error" in message) {
+      const error: unknown = message.error;
+      if (error && typeof error === "object" && "code" in error)
+        return typeof error.code === "string" ? error.code : undefined;
+    }
+  } catch {
+    // Unknown registry failures must not be mistaken for a missing package.
+  }
+  return undefined;
+}
+
 function alreadyPublished(
   context: RegistryContext,
   artifact: ReleaseTarball,
@@ -236,18 +250,7 @@ function alreadyPublished(
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    let code: unknown;
-    try {
-      const message: unknown = JSON.parse(result.stdout || result.stderr);
-      if (message && typeof message === "object" && "error" in message) {
-        const error: unknown = message.error;
-        if (error && typeof error === "object" && "code" in error)
-          code = error.code;
-      }
-    } catch {
-      // Treat unknown registry failures as errors, never as missing versions.
-    }
-    if (code === "E404") return false;
+    if (npmErrorCode(result.stdout || result.stderr) === "E404") return false;
     throw new Error(`npm view failed: ${result.stderr || result.stdout}`);
   }
   const integrity: unknown = JSON.parse(result.stdout);
@@ -299,6 +302,18 @@ export function publishedDistTagStatus(
   );
 }
 
+/** Do not let a new publication move an existing dist-tag backwards. */
+export function assertDistTagWillNotDowngrade(
+  expected: string,
+  actual: string | undefined,
+  distTag: "latest" | "beta",
+): void {
+  if (actual && compareReleaseVersions(actual, expected) > 0)
+    throw new Error(
+      `Refusing to publish import-sync@${expected}: npm ${distTag} already points to newer ${actual}`,
+    );
+}
+
 function readPublishedDistTag(
   context: RegistryContext,
   distTag: "latest" | "beta",
@@ -319,10 +334,14 @@ function readPublishedDistTag(
     { encoding: "utf8" },
   );
   if (result.error) throw result.error;
-  if (result.status !== 0)
+  // E404 means the package has never been published. Other errors fail closed.
+  if (result.status !== 0) {
+    if (npmErrorCode(result.stdout || result.stderr) === "E404")
+      return undefined;
     throw new Error(
       `npm dist-tag lookup failed: ${result.stderr || result.stdout}`,
     );
+  }
   const value: unknown = JSON.parse(result.stdout);
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid npm dist-tags response");
@@ -330,6 +349,27 @@ function readPublishedDistTag(
   if (tag !== undefined && typeof tag !== "string")
     throw new Error(`Invalid npm ${distTag} dist-tag`);
   return tag;
+}
+
+async function verifyPrepublicationDistTag(
+  context: RegistryContext,
+  distTag: "latest" | "beta",
+  attempt = 1,
+): Promise<void> {
+  try {
+    assertDistTagWillNotDowngrade(
+      context.version,
+      readPublishedDistTag(context, distTag),
+      distTag,
+    );
+  } catch (error) {
+    if (attempt >= 3 || !transientError.test(String(error))) throw error;
+    console.warn(
+      `${styleText("yellow", "RETRY")} npm dist-tag lookup (${attempt}/3)`,
+    );
+    await setTimeout(retryDelay(attempt));
+    await verifyPrepublicationDistTag(context, distTag, attempt + 1);
+  }
 }
 
 /** Allow time for registry metadata to catch up with an accepted publish. */
@@ -515,6 +555,7 @@ export async function publishReleasePackage({
     );
     return;
   }
+  await verifyPrepublicationDistTag(context, distTag);
   await publishWithRecovery(context, artifact, distTag);
   await verifyPublishedDistTag(context, distTag);
   console.log(
