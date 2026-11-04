@@ -1,10 +1,4 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +9,7 @@ import {
   getStartupRequireConditions,
   resolvePackageId,
 } from "#/resolve.ts";
+import { createImportOnlyPackageFixture } from "../helpers/fixtures.ts";
 
 test.each([
   {
@@ -191,6 +186,54 @@ test.each([
   expect(resolve).toHaveBeenCalledExactlyOnceWith("broken-package");
 });
 
+test("recovers from Node 16's broken package-import pattern resolution", () => {
+  const error = Object.assign(
+    new TypeError(
+      'The "path" argument must be of type string or an instance of URL. Received undefined',
+    ),
+    { code: "ERR_INVALID_ARG_TYPE" },
+  );
+  const resolve = vi.fn((): string => {
+    throw error;
+  });
+  const resolveImport = vi.fn(() => "file:///app/node_modules/pkg/feature.mjs");
+
+  expect(resolvePackageId("#external/feature", resolve, resolveImport)).toBe(
+    "file:///app/node_modules/pkg/feature.mjs",
+  );
+  expect(resolve).toHaveBeenCalledExactlyOnceWith("#external/feature");
+  expect(resolveImport).toHaveBeenCalledExactlyOnceWith();
+});
+
+test("does not mask unrelated native argument errors", () => {
+  const node16Error = Object.assign(
+    new TypeError(
+      'The "path" argument must be of type string. Received undefined',
+    ),
+    { code: "ERR_INVALID_ARG_TYPE" },
+  );
+  const unexpectedError = Object.assign(new TypeError("custom hook failure"), {
+    code: "ERR_INVALID_ARG_TYPE",
+  });
+  const notTypeError = Object.assign(
+    new Error('The "path" argument must be of type string'),
+    { code: "ERR_INVALID_ARG_TYPE" },
+  );
+  for (const [id, error, resolveImport] of [
+    ["external", node16Error, vi.fn(() => "file:///unexpected.mjs")],
+    ["#external", unexpectedError, vi.fn(() => "file:///unexpected.mjs")],
+    ["#external", notTypeError, vi.fn(() => "file:///unexpected.mjs")],
+    ["#external", node16Error, undefined],
+  ] as const) {
+    const resolve = vi.fn((): string => {
+      throw error;
+    });
+    expect(() => resolvePackageId(id, resolve, resolveImport)).toThrow(error);
+    expect(resolve).toHaveBeenCalledExactlyOnceWith(id);
+    if (resolveImport) expect(resolveImport).not.toHaveBeenCalled();
+  }
+});
+
 test("resolves a hook-only ESM specifier when CommonJS resolution misses it", () => {
   const missing = Object.assign(new Error("missing CommonJS module"), {
     code: "MODULE_NOT_FOUND",
@@ -260,19 +303,10 @@ test("uses Node's native matching for import-only exports, subpaths, and aliases
     );
     writeFileSync(join(root, "internal.mjs"), "export const value = 1;\n");
 
-    const packageRoot = join(root, "node_modules", "only-import");
-    mkdirSync(join(packageRoot, "features"), { recursive: true });
-    writeFileSync(
-      join(packageRoot, "package.json"),
-      JSON.stringify({
-        name: "only-import",
-        type: "module",
-        exports: {
-          ".": { import: "./entry.mjs" },
-          "./features/*": { import: "./features/*.mjs" },
-        },
-      }),
-    );
+    const packageRoot = createImportOnlyPackageFixture(root, {
+      ".": { import: "./entry.mjs" },
+      "./features/*": { import: "./features/*.mjs" },
+    });
     writeFileSync(join(packageRoot, "entry.mjs"), "export const value = 2;\n");
     writeFileSync(
       join(packageRoot, "features", "one.mjs"),

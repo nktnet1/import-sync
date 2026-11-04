@@ -14,8 +14,13 @@ import {
   MissingModuleFileError,
   toESMRelativeSpecifier,
 } from "#/files.ts";
+import { resolveLegacyImport } from "#/legacy-resolve.ts";
 import { Options } from "#/options.ts";
-import { resolvePackageId, supportsNativeResolverHooks } from "#/resolve.ts";
+import {
+  getStartupImportConditions,
+  resolvePackageId,
+  supportsNativeResolverHooks,
+} from "#/resolve.ts";
 
 /**
  * Returns an ESM-imported module
@@ -107,7 +112,12 @@ const resolveConsumerPackage = (id: string, caller: CallerLocation): string => {
     resolveRequire,
     useNativeResolver
       ? () => resolveNativeImportFrom(id, caller.parentURL)
-      : undefined,
+      : () =>
+          resolveLegacyImport(
+            id,
+            caller.filename,
+            getStartupImportConditions(),
+          ),
   );
 };
 

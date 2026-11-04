@@ -164,6 +164,8 @@ export const supportsNativeResolverHooks = (): boolean =>
 // Snapshot the real process-start conditions, not mutable runtime flags.
 const startupConditions = readStartupConditions();
 const startupImportConditions = startupConditions.import;
+export const getStartupImportConditions = (): Set<string> =>
+  new Set(startupImportConditions);
 export const getStartupRequireConditions = (): string[] => [
   ...startupConditions.require,
 ];
@@ -210,6 +212,19 @@ export const resolvePackageId = (
         return resolve(id, {
           conditions: new Set(startupImportConditions),
         } as NodeJS.RequireResolveOptions);
+      case "ERR_INVALID_ARG_TYPE":
+        // Node 16's CommonJS resolver can pass undefined to fileURLToPath
+        // for #imports patterns redirecting to external packages. Preserve
+        // unrelated TypeErrors rather than treating them as missing entries.
+        if (
+          id.startsWith("#") &&
+          resolveImport &&
+          error instanceof TypeError &&
+          error.message.startsWith('The "path" argument must be')
+        ) {
+          return resolveImport();
+        }
+        throw error;
       case "MODULE_NOT_FOUND":
         // On Node 22, require.resolve() does not always invoke synchronous
         // resolver hooks, even when a hooked require() or import() succeeds.
