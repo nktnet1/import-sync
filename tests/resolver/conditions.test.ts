@@ -191,6 +191,54 @@ test.each([
   expect(resolve).toHaveBeenCalledExactlyOnceWith("broken-package");
 });
 
+test("recovers from Node 16's broken package-import pattern resolution", () => {
+  const error = Object.assign(
+    new TypeError(
+      'The "path" argument must be of type string or an instance of URL. Received undefined',
+    ),
+    { code: "ERR_INVALID_ARG_TYPE" },
+  );
+  const resolve = vi.fn((): string => {
+    throw error;
+  });
+  const resolveImport = vi.fn(() => "file:///app/node_modules/pkg/feature.mjs");
+
+  expect(resolvePackageId("#external/feature", resolve, resolveImport)).toBe(
+    "file:///app/node_modules/pkg/feature.mjs",
+  );
+  expect(resolve).toHaveBeenCalledExactlyOnceWith("#external/feature");
+  expect(resolveImport).toHaveBeenCalledExactlyOnceWith();
+});
+
+test("does not mask unrelated native argument errors", () => {
+  const node16Error = Object.assign(
+    new TypeError(
+      'The "path" argument must be of type string. Received undefined',
+    ),
+    { code: "ERR_INVALID_ARG_TYPE" },
+  );
+  const unexpectedError = Object.assign(new TypeError("custom hook failure"), {
+    code: "ERR_INVALID_ARG_TYPE",
+  });
+  const notTypeError = Object.assign(
+    new Error('The "path" argument must be of type string'),
+    { code: "ERR_INVALID_ARG_TYPE" },
+  );
+  for (const [id, error, resolveImport] of [
+    ["external", node16Error, vi.fn(() => "file:///unexpected.mjs")],
+    ["#external", unexpectedError, vi.fn(() => "file:///unexpected.mjs")],
+    ["#external", notTypeError, vi.fn(() => "file:///unexpected.mjs")],
+    ["#external", node16Error, undefined],
+  ] as const) {
+    const resolve = vi.fn((): string => {
+      throw error;
+    });
+    expect(() => resolvePackageId(id, resolve, resolveImport)).toThrow(error);
+    expect(resolve).toHaveBeenCalledExactlyOnceWith(id);
+    if (resolveImport) expect(resolveImport).not.toHaveBeenCalled();
+  }
+});
+
 test("resolves a hook-only ESM specifier when CommonJS resolution misses it", () => {
   const missing = Object.assign(new Error("missing CommonJS module"), {
     code: "MODULE_NOT_FOUND",
