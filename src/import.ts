@@ -11,6 +11,7 @@ import {
   getCallerFilename,
   isRelativePath,
   MissingModuleFileError,
+  toESMRelativeSpecifier,
 } from "#/files.ts";
 import { Options } from "#/options.ts";
 import { getStartupRequireConditions, resolvePackageId } from "#/resolve.ts";
@@ -153,7 +154,10 @@ const resolveRelativeModule = (
     return resolveLegacy();
   }
 
-  const native = resolveNativeImportFrom(id, callerFilename);
+  const native = resolveNativeImportFrom(
+    toESMRelativeSpecifier(id),
+    callerFilename,
+  );
   if (!isFileURL(native)) return native;
 
   const nativePath = fileURLToPath(native);

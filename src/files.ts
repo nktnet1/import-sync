@@ -38,6 +38,12 @@ export const isRelativePath = (
   /^\.\.?\//.test(id) ||
   (separator === "\\" && /^\.\.?\\/.test(id));
 
+/** Normalise Windows separators only for Node's URL-based ESM resolver. */
+export const toESMRelativeSpecifier = (
+  id: string,
+  separator: string = path.sep,
+): string => (separator === "\\" ? id.replaceAll("\\", "/") : id);
+
 /**
  * Get the file path of the caller function.
  *
