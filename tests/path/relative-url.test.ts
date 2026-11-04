@@ -1,4 +1,5 @@
 import fs, { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -40,6 +41,96 @@ test.each([
     });
   },
 );
+
+test("honours native redirects for existing literal URL-character filenames", () => {
+  withTemporaryDirectory("import-sync-literal-hook-unit-", (root) => {
+    const literal = join(root, "literal%20name.mjs");
+    const target = join(root, "redirected.mjs");
+    writeFileSync(literal, 'export const value = "literal";\n');
+    writeFileSync(
+      target,
+      'export const value = "redirected"; export const url = import.meta.url;\n',
+    );
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "./literal%20name.mjs") {
+          return {
+            url: `${pathToFileURL(target).href}?tag=2`,
+            shortCircuit: true,
+          };
+        }
+        return nextResolve(id, context);
+      },
+    });
+    try {
+      const loaded = importSync("./literal%20name.mjs", { basePath: root });
+      expect(loaded.value).toBe("redirected");
+      expect(new URL(loaded.url).search).toBe("?tag=2");
+    } finally {
+      hook.deregister();
+    }
+  });
+});
+
+test("honours native redirects when the decoded filename does not exist", () => {
+  withTemporaryDirectory("import-sync-literal-hook-missing-", (root) => {
+    const literal = join(root, "literal%20missing.mjs");
+    const target = join(root, "redirected.mjs");
+    writeFileSync(literal, 'export const value = "literal";\n');
+    writeFileSync(target, 'export const value = "redirected";\n');
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "./literal%20missing.mjs") {
+          return { url: pathToFileURL(target).href, shortCircuit: true };
+        }
+        return nextResolve(id, context);
+      },
+    });
+    try {
+      expect(
+        importSync("./literal%20missing.mjs", { basePath: root }).value,
+      ).toBe("redirected");
+    } finally {
+      hook.deregister();
+    }
+  });
+});
+
+test("preserves a literal filename containing an encoded path separator", () => {
+  withTemporaryDirectory("import-sync-literal-encoded-separator-", (root) => {
+    writeFileSync(
+      join(root, "literal%2Fslash.mjs"),
+      'export const value = "literal separator";\n',
+    );
+    expect(importSync("./literal%2Fslash.mjs", { basePath: root }).value).toBe(
+      "literal separator",
+    );
+  });
+});
+
+test("honours a native hook redirecting a literal filename to a built-in", () => {
+  withTemporaryDirectory("import-sync-literal-builtin-hook-", (root) => {
+    writeFileSync(
+      join(root, "literal%20builtin.mjs"),
+      'export const value = "literal";\n',
+    );
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "./literal%20builtin.mjs") {
+          return { url: "node:path", shortCircuit: true };
+        }
+        return nextResolve(id, context);
+      },
+    });
+    try {
+      expect(
+        importSync("./literal%20builtin.mjs", { basePath: root }).sep,
+      ).toBe(process.platform === "win32" ? "\\" : "/");
+    } finally {
+      hook.deregister();
+    }
+  });
+});
 
 test("preserves cache identity for distinct relative query strings", () => {
   withTemporaryDirectory("import-sync-url-cache-", (root) => {

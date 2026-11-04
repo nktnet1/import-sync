@@ -137,6 +137,58 @@ const resolveConsumerPackage = (id: string, callerFilename: string): string => {
     : resolved;
 };
 
+/** Whether native URL resolution selected the unmodified relative specifier. */
+const isDefaultRelativeURL = (
+  id: string,
+  callerFilename: string,
+  resolved: string,
+): boolean => {
+  if (!isFileURL(resolved)) return false;
+  const native = new URL(resolved);
+  const expected = new URL(id, pathToFileURL(callerFilename).href);
+  if (native.href === expected.href) return true;
+  if (native.search !== expected.search || native.hash !== expected.hash) {
+    return false;
+  }
+
+  // Native ESM resolution canonicalises symlinks, but an unmodified URL may
+  // refer to a missing file. Canonicalise its existing parent in that case.
+  const canonicalTarget = (url: URL): string => {
+    const filename = fileURLToPath(url);
+    try {
+      return realpathSync(filename);
+    } catch {
+      return path.join(
+        realpathSync(path.dirname(filename)),
+        path.basename(filename),
+      );
+    }
+  };
+  return canonicalTarget(native) === canonicalTarget(expected);
+};
+
+/** Honour native hook overrides without decoding actual literal filenames. */
+const resolveLiteralRelativeModule = (
+  id: string,
+  callerFilename: string,
+  resolveLegacy: () => string,
+): string => {
+  // Encoded separators and NUL bytes cannot form native file URLs, but are
+  // valid literal characters in a filesystem name on supported platforms.
+  if (/%(?:2f|5c|00)/i.test(id)) return resolveLegacy();
+  const native = resolveNativeImportFrom(
+    toESMRelativeSpecifier(id),
+    callerFilename,
+  );
+  return isDefaultRelativeURL(
+    toESMRelativeSpecifier(id),
+    callerFilename,
+    native,
+  )
+    ? resolveLegacy()
+    : native;
+};
+
 /** Resolve redirects installed by Node's synchronous hooks, retaining path rules. */
 const resolveRelativeModule = (
   id: string,
@@ -151,7 +203,7 @@ const resolveRelativeModule = (
     /[?#%]/.test(id) &&
     statSync(path.resolve(basePath, id), { throwIfNoEntry: false })?.isFile()
   ) {
-    return resolveLegacy();
+    return resolveLiteralRelativeModule(id, callerFilename, resolveLegacy);
   }
 
   const native = resolveNativeImportFrom(

@@ -284,6 +284,87 @@ testIsolatedConsumers(
   },
 );
 
+testIsolatedConsumers(
+  "honours hook redirects and rejections for literal URL-character filenames in %s consumers",
+  "import-sync-literal-hook-",
+  (root, extension) => {
+    writeFileSync(
+      join(root, "literal%20name.mjs"),
+      'export const value = "literal";\n',
+    );
+    writeFileSync(
+      join(root, "literal name.mjs"),
+      'export const value = "decoded";\n',
+    );
+    writeFileSync(
+      join(root, "literal#name.mjs"),
+      'export const value = "hash literal";\n',
+    );
+    writeFileSync(
+      join(root, "literal%3Fmissing.mjs"),
+      'export const value = "missing decoded";\n',
+    );
+    writeFileSync(
+      join(root, "literal%20query.mjs"),
+      'export const value = "literal query";\n',
+    );
+    writeFileSync(
+      join(root, "redirected.mjs"),
+      'export const value = "redirected"; export const url = import.meta.url;\n',
+    );
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = ${extension === "mjs" ? 'await import("node:module")' : 'require("node:module")'};
+  const { pathToFileURL } = ${extension === "mjs" ? 'await import("node:url")' : 'require("node:url")'};
+  const { join } = ${extension === "mjs" ? 'await import("node:path")' : 'require("node:path")'};
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "./literal%20name.mjs" || id === "./literal%3Fmissing.mjs") return { url: pathToFileURL(join(${JSON.stringify(root)}, "redirected.mjs")).href, shortCircuit: true };
+      if (id === "./literal%20query.mjs") return { url: pathToFileURL(join(${JSON.stringify(root)}, "redirected.mjs")).href + "?tag=2", shortCircuit: true };
+      if (id === "./literal#name.mjs") throw new Error("blocked literal hash");
+      return nextResolve(id, context);
+    }
+  });
+  try {
+    const native = (await import("./literal%20name.mjs")).value;
+    const wrapper = importSync("./literal%20name.mjs").value;
+    const missing = importSync("./literal%3Fmissing.mjs").value;
+    const suffix = new URL(importSync("./literal%20query.mjs").url).search;
+    let blocked = false;
+    try { importSync("./literal#name.mjs"); } catch (error) { blocked = error.message === "blocked literal hash"; }
+    console.log(JSON.stringify({ native, wrapper, missing, suffix, blocked }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      {
+        native: "redirected",
+        wrapper: "redirected",
+        missing: "redirected",
+        suffix: "?tag=2",
+        blocked: true,
+      },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "preserves literal encoded-separator filenames in %s consumers",
+  "import-sync-literal-separator-",
+  (root, extension) => {
+    writeFileSync(
+      join(root, "literal%2Fslash.mjs"),
+      'export const value = "encoded separator literal";\n',
+    );
+    expectConsumerResult(
+      root,
+      extension,
+      'console.log(JSON.stringify({ value: importSync("./literal%2Fslash.mjs").value }));\n',
+      { value: "encoded separator literal" },
+    );
+  },
+);
+
 test("uses native import resolution when the test module is the caller", () => {
   const packageName = "import-sync-native-resolve-fixture";
   const moduleDirectory = join(
