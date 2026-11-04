@@ -1,7 +1,7 @@
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { types } from "node:util";
 import esm from "esm-sync";
 
@@ -92,11 +92,35 @@ const importSync = (id: string, options: Options = {}) => {
   } else if (path.isAbsolute(id) || isFileURL(id) || isBuiltin(id)) {
     modulePath = id;
   } else {
+    const callerFile = path.join(getCallerDirname(), "__import_sync__.cjs");
     modulePath = resolvePackageId(
       id,
-      createRequire(path.join(getCallerDirname(), "__import_sync__.cjs"))
-        .resolve,
+      createRequire(callerFile).resolve,
+      process.features.require_module
+        ? () => {
+            // The native ESM helper is distributed alongside index.cjs.
+            // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
+            const { resolveImportFrom } = require(
+              path.join(__dirname, "native-resolve.mjs"),
+            ) as {
+              resolveImportFrom: (id: string, parentURL: string) => string;
+            };
+            return resolveImportFrom(id, pathToFileURL(callerFile).href);
+          }
+        : undefined,
     );
+  }
+
+  // A resolved filesystem filename can contain literal URL characters.
+  // Pass those paths as encoded file URLs so the loader cannot interpret
+  // "%20", "?", or "#" as URL syntax and load a different file. A suffix
+  // on a nonexistent literal path remains a query/fragment specifier.
+  if (
+    path.isAbsolute(modulePath) &&
+    /[?#%]/.test(modulePath) &&
+    statSync(modulePath, { throwIfNoEntry: false })?.isFile()
+  ) {
+    modulePath = pathToFileURL(modulePath).href;
   }
 
   const importedModule = esmImport(modulePath, options);

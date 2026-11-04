@@ -190,6 +190,28 @@ test.each([
   expect(resolve).toHaveBeenCalledExactlyOnceWith("broken-package");
 });
 
+test("resolves a hook-only ESM specifier when CommonJS resolution misses it", () => {
+  const missing = Object.assign(new Error("missing CommonJS module"), {
+    code: "MODULE_NOT_FOUND",
+  });
+  const resolve = vi.fn(() => {
+    throw missing;
+  });
+  const resolveImport = vi.fn(() => "file:///virtual/module.mjs");
+  expect(resolvePackageId("virtual:module", resolve, resolveImport)).toBe(
+    "file:///virtual/module.mjs",
+  );
+  expect(resolveImport).toHaveBeenCalledOnce();
+
+  const importMissing = vi.fn(() => {
+    throw new Error("no ESM module");
+  });
+  expect(() => resolvePackageId("missing", resolve, importMissing)).toThrow(
+    missing,
+  );
+  expect(importMissing).toHaveBeenCalledOnce();
+});
+
 test("uses Node's native matching for import-only exports, subpaths, and aliases", () => {
   const root = realpathSync(
     mkdtempSync(join(tmpdir(), "import-sync-conditions-")),

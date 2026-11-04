@@ -1,7 +1,8 @@
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import importSync from "#/index.ts";
 import { runConsumer } from "../helpers/consumer.ts";
 import { withTemporaryDirectory } from "../helpers/fixtures.ts";
 
@@ -141,6 +142,172 @@ console.log(JSON.stringify({ esm: esm.value, cjs: cjs.value, cached: importSync(
     );
   },
 );
+
+testIsolatedConsumers(
+  "preserves percent characters in import-only package targets for %s consumers",
+  "import-sync-package-literal-",
+  (root, extension) => {
+    writeIsolatedPackage(
+      root,
+      "literal-package",
+      {
+        name: "literal-package",
+        type: "module",
+        exports: { import: "./entry%2520name.mjs" },
+      },
+      {
+        "entry%20name.mjs": 'export const value = "literal";\n',
+        "entry name.mjs": 'export const value = "decoded";\n',
+      },
+    );
+
+    expectConsumerResult(
+      root,
+      extension,
+      `console.log(JSON.stringify({ value: importSync("literal-package").value }));\n`,
+      { value: "literal" },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "preserves import-only export URL suffixes for %s consumers",
+  "import-sync-package-suffix-",
+  (root, extension) => {
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "suffix-consumer",
+        type: "module",
+        imports: {
+          "#query": { import: "./internal.mjs?alias=1" },
+          "#fragment": { import: "./internal.mjs#alias" },
+        },
+        exports: { "./self": { import: "./internal.mjs?self=1" } },
+      }),
+    );
+    writeFileSync(
+      join(root, "internal.mjs"),
+      "export const url = import.meta.url;\n",
+    );
+    writeIsolatedPackage(
+      root,
+      "suffix-package",
+      {
+        name: "suffix-package",
+        type: "module",
+        exports: {
+          ".": { import: "./entry.mjs?version=1" },
+          "./other": { import: "./entry.mjs?version=2" },
+          "./fragment": { import: "./entry.mjs#section" },
+          "./encoded": { import: "./entry%2520name.mjs?version=3" },
+        },
+      },
+      {
+        "entry.mjs": "export const url = import.meta.url;\n",
+        "entry%20name.mjs": "export const url = import.meta.url;\n",
+      },
+    );
+    const ids = [
+      "suffix-package",
+      "suffix-package/other",
+      "suffix-package/fragment",
+      "suffix-package/encoded",
+      "#query",
+      "#fragment",
+      "suffix-consumer/self",
+    ];
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const ids = ${JSON.stringify(ids)};
+  const imported = ids.map((id) => importSync(id).url);
+  const native = await Promise.all(ids.map(async (id) => (await import(id)).url));
+  console.log(JSON.stringify({ identical: imported.every((url, index) => url === native[index]), suffixes: imported.map((url) => new URL(url).search + new URL(url).hash) }));
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      {
+        identical: true,
+        suffixes: [
+          "?version=1",
+          "?version=2",
+          "#section",
+          "?version=3",
+          "?alias=1",
+          "#alias",
+          "?self=1",
+        ],
+      },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "honours synchronous custom resolver hooks for %s consumers",
+  "import-sync-hooked-specifier-",
+  (root, extension) => {
+    const modulePath = join(root, "hooked.mjs");
+    writeFileSync(modulePath, "export const value = 42;\n");
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = ${extension === "mjs" ? 'await import("node:module")' : 'require("node:module")'};
+  const { pathToFileURL } = ${extension === "mjs" ? 'await import("node:url")' : 'require("node:url")'};
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "virtual:entry") return { url: pathToFileURL(${JSON.stringify(modulePath)}).href, shortCircuit: true };
+      return nextResolve(id, context);
+    }
+  });
+  try {
+    const native = await import("virtual:entry");
+    const imported = importSync("virtual:entry");
+    console.log(JSON.stringify({ native: native.value, imported: imported.value }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      { native: 42, imported: 42 },
+    );
+  },
+);
+
+test("uses native import resolution when the test module is the caller", () => {
+  const packageName = "import-sync-native-resolve-fixture";
+  const moduleDirectory = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "node_modules",
+    packageName,
+  );
+  mkdirSync(moduleDirectory, { recursive: true });
+  try {
+    writeFileSync(
+      join(moduleDirectory, "package.json"),
+      JSON.stringify({
+        name: packageName,
+        type: "module",
+        exports: {
+          ".": { import: "./entry.mjs?direct=1" },
+          "./plain": { import: "./entry.mjs" },
+        },
+      }),
+    );
+    writeFileSync(
+      join(moduleDirectory, "entry.mjs"),
+      "export const url = import.meta.url;\n",
+    );
+    expect(importSync(packageName).url).toMatch(/\/entry\.mjs\?direct=1$/);
+    const requireModule = vi
+      .spyOn(process.features, "require_module", "get")
+      .mockReturnValue(false);
+    try {
+      expect(importSync(`${packageName}/plain`).url).toMatch(/\/entry\.mjs$/);
+    } finally {
+      requireModule.mockRestore();
+    }
+  } finally {
+    rmSync(moduleDirectory, { force: true, recursive: true });
+  }
+});
 
 test("prefers the application's own installed package over the library's copy", () => {
   withTemporaryDirectory("import-sync-shadow-", (root) => {

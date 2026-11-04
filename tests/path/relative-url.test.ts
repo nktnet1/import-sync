@@ -68,6 +68,53 @@ test("preserves literal file paths containing special URL characters", () => {
   });
 });
 
+test.each([
+  { literal: "literal%20space.mjs", decoded: "literal space.mjs" },
+  { literal: "literal%23hash.mjs", decoded: "literal#hash.mjs" },
+  { literal: "literal%3Fquery.mjs", decoded: "literal?query.mjs" },
+  { literal: "literal%2Efile.mjs", decoded: "literal.file.mjs" },
+  { literal: "literal?query.mjs", decoded: "literal" },
+  { literal: "literal#hash.mjs", decoded: "literal" },
+])(
+  "does not decode a literal filename $literal into an existing different module",
+  ({ literal, decoded }) => {
+    withTemporaryDirectory("import-sync-literal-collision-", (root) => {
+      const literalPath = join(root, literal);
+      writeFileSync(literalPath, 'export const value = "literal";\n');
+      writeFileSync(join(root, decoded), 'export const value = "decoded";\n');
+
+      const fromRelative = importSync(`./${literal}`, { basePath: root });
+      const fromAbsolute = importSync(literalPath);
+      const fromURL = importSync(pathToFileURL(literalPath).href);
+
+      expect(fromRelative.value).toBe("literal");
+      expect(fromRelative).toBe(fromAbsolute);
+      expect(fromAbsolute).toBe(fromURL);
+    });
+  },
+);
+
+test("does not decode percent escapes in the containing directory", () => {
+  withTemporaryDirectory("import-sync-literal-parent-", (root) => {
+    const literalDirectory = join(root, "literal%20parent");
+    const decodedDirectory = join(root, "literal parent");
+    fs.mkdirSync(literalDirectory);
+    fs.mkdirSync(decodedDirectory);
+    writeFileSync(
+      join(literalDirectory, "entry.mjs"),
+      'export const value = "literal";\n',
+    );
+    writeFileSync(
+      join(decodedDirectory, "entry.mjs"),
+      'export const value = "decoded";\n',
+    );
+
+    const relative = importSync("./entry.mjs", { basePath: literalDirectory });
+    expect(relative.value).toBe("literal");
+    expect(importSync(join(literalDirectory, "entry.mjs"))).toBe(relative);
+  });
+});
+
 test("preserves unexpected filesystem errors when a relative URL cannot be inspected", () => {
   const expectedError = Object.assign(new Error("permission denied"), {
     code: "EACCES",

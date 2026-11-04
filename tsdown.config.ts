@@ -1,3 +1,4 @@
+import { copyFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "tsdown";
 import { emitDeclarations } from "./script/emit-declarations.ts";
@@ -11,7 +12,15 @@ export default defineConfig({
   outDir: "./dist",
   // Preserve ESM declaration source maps and provide a correct CJS type facade.
   dts: { sourcemap: true },
-  onSuccess: (config) => emitDeclarations(resolve(config.cwd, config.outDir)),
+  onSuccess: (config) => {
+    const outDir = resolve(config.cwd, config.outDir);
+    emitDeclarations(outDir);
+    // Keep this file as native ESM for synchronous import.meta.resolve.
+    copyFileSync(
+      resolve(config.cwd, "src/native-resolve.mjs"),
+      resolve(outDir, "native-resolve.mjs"),
+    );
+  },
   clean: true,
   minify: false,
   sourcemap: true,

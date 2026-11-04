@@ -148,6 +148,7 @@ const startupImportConditions = readStartupImportConditions();
 export const resolvePackageId = (
   id: string,
   resolve: (id: string, options?: NodeJS.RequireResolveOptions) => string,
+  resolveImport?: () => string,
 ): string => {
   try {
     return resolve(id);
@@ -155,9 +156,24 @@ export const resolvePackageId = (
     switch ((error as NodeJS.ErrnoException | undefined)?.code) {
       case "ERR_PACKAGE_PATH_NOT_EXPORTED":
       case "ERR_PACKAGE_IMPORT_NOT_DEFINED":
+        // CJS resolution discards ESM URL search parameters and fragments.
+        // When available, use Node's import resolver in the consumer's scope.
+        if (resolveImport) return resolveImport();
         return resolve(id, {
           conditions: new Set(startupImportConditions),
         } as NodeJS.RequireResolveOptions);
+      case "MODULE_NOT_FOUND":
+        // On Node 22, require.resolve() does not always invoke synchronous
+        // resolver hooks, even when a hooked require() or import() succeeds.
+        // Keep the original failure when ESM cannot resolve it either.
+        if (resolveImport) {
+          try {
+            return resolveImport();
+          } catch {
+            // No native import target exists for this specifier.
+          }
+        }
+        throw error;
       default:
         throw error;
     }
