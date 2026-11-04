@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import { getCallerDirname } from "#/files.ts";
+import { getCallerDirname, getCallerFilename } from "#/files.ts";
 import importSync from "#/index.ts";
+import { runConsumer } from "../helpers/consumer.ts";
+import { withTemporaryDirectory } from "../helpers/fixtures.ts";
 
 const libraryPath = fs.realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
@@ -31,30 +32,95 @@ const fakeCallSite = (fileName: string | null, evalOrigin: string | null) => ({
   getEvalOrigin: () => evalOrigin,
 });
 
+/** Verify caller directories using the same mocked V8 stack shape. */
+const expectCallerDirectoryToBeCwd = (
+  fileName: string | null,
+  evalOrigin: string | null,
+): void => {
+  withCapturedStack(
+    [fakeCallSite(null, null), fakeCallSite(fileName, evalOrigin)],
+    () => {
+      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
+    },
+  );
+};
+
 test("decodes escaped ESM caller URLs", () => {
   const callerFile = path.join(
     fs.realpathSync(process.cwd()),
     "space percent% hash# unicode-🍄.mjs",
   );
-  withCapturedStack(
-    [
-      fakeCallSite(null, null),
-      fakeCallSite(pathToFileURL(callerFile).href, null),
-    ],
-    () => {
-      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
-    },
-  );
+  expectCallerDirectoryToBeCwd(pathToFileURL(callerFile).href, null);
 });
 
 test("uses the working directory for a relative eval caller", () => {
-  withCapturedStack(
-    [fakeCallSite(null, null), fakeCallSite("[eval]", null)],
-    () => {
-      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
-    },
-  );
+  expectCallerDirectoryToBeCwd("[eval]", null);
 });
+
+test.each([
+  {
+    name: "matching CLI eval module",
+    caller: "[eval]",
+    filename: "valid",
+    match: true,
+  },
+  {
+    name: "matching CLI stdin module",
+    caller: "[stdin]",
+    filename: "valid",
+    match: true,
+  },
+  {
+    name: "no CLI module",
+    caller: "[eval]",
+    filename: undefined,
+    match: false,
+  },
+  {
+    name: "nonabsolute CLI module",
+    caller: "[eval]",
+    filename: "relative",
+    match: false,
+  },
+  {
+    name: "unrelated CLI module",
+    caller: "[eval]",
+    filename: "other",
+    match: false,
+  },
+])(
+  "uses the original CLI filename for $name",
+  ({ caller, filename, match }) => {
+    const cwd = fs.realpathSync(process.cwd());
+    const initialPath = path.join(cwd, "somewhere", caller);
+    let moduleFilename: string | undefined;
+    if (filename === "valid") moduleFilename = initialPath;
+    if (filename === "relative") moduleFilename = caller;
+    if (filename === "other") moduleFilename = path.join(cwd, "unrelated.cjs");
+    const globalModule = moduleFilename
+      ? { filename: moduleFilename }
+      : undefined;
+    const original = Object.getOwnPropertyDescriptor(globalThis, "module");
+    try {
+      Object.defineProperty(globalThis, "module", {
+        configurable: true,
+        writable: true,
+        value: globalModule,
+      });
+      withCapturedStack(
+        [fakeCallSite(null, null), fakeCallSite(caller, null)],
+        () => {
+          expect(getCallerFilename()).toBe(
+            match ? initialPath : path.join(cwd, caller),
+          );
+        },
+      );
+    } finally {
+      if (original) Object.defineProperty(globalThis, "module", original);
+      else Reflect.deleteProperty(globalThis, "module");
+    }
+  },
+);
 
 test("resolves package imports from a CommonJS eval caller", () => {
   const cwd = fs.realpathSync(process.cwd());
@@ -72,13 +138,66 @@ if (typeof importSync("node-fetch").default !== "function") throw new Error("inc
 
 test("falls back to eval origin when the caller filename is absent", () => {
   const callerFile = path.join(fs.realpathSync(process.cwd()), "eval.js");
-  withCapturedStack(
-    [fakeCallSite(null, null), fakeCallSite(null, callerFile)],
-    () => {
-      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
-    },
-  );
+  expectCallerDirectoryToBeCwd(null, callerFile);
 });
+
+test.each(["single", "nested"])(
+  "extracts caller paths from %s V8 eval origins",
+  (level) => {
+    const callerFile = path.join(
+      fs.realpathSync(process.cwd()),
+      "caller (test).mjs",
+    );
+    const source = `${pathToFileURL(callerFile).href}:3:12`;
+    const origin =
+      level === "nested"
+        ? `eval at outer (eval at inner (${source}))`
+        : `eval at outer (${source})`;
+    expectCallerDirectoryToBeCwd(null, origin);
+  },
+);
+
+test.each(["eval at missing filename", "eval at inner (unterminated"])(
+  "rejects malformed V8 eval origin %s",
+  (origin) => {
+    withCapturedStack(
+      [fakeCallSite(null, null), fakeCallSite(null, origin)],
+      () => {
+        expect(() => getCallerDirname()).toThrow("Unknown caller file path");
+      },
+    );
+  },
+);
+
+test.each(["cjs", "mjs"])(
+  "resolves relative imports from eval and nested eval in a built %s consumer",
+  (extension) => {
+    withTemporaryDirectory("import-sync-eval-", (root) => {
+      const directory = path.join(root, "folder (with spaces)");
+      fs.mkdirSync(directory);
+      fs.writeFileSync(
+        path.join(directory, "fixture.mjs"),
+        'export const value = "from eval";\n',
+      );
+      const prefix =
+        extension === "mjs"
+          ? `import importSync from ${JSON.stringify(pathToFileURL(libraryPath).href)};`
+          : `const importSync = require(${JSON.stringify(libraryPath)});`;
+      const expression = 'importSync("./fixture.mjs").value';
+      const nestedExpression = `eval(${JSON.stringify(expression)})`;
+      const consumer = path.join(directory, `consumer.${extension}`);
+      fs.writeFileSync(
+        consumer,
+        `${prefix}\nconsole.log(JSON.stringify([eval(${JSON.stringify(expression)}), eval(${JSON.stringify(nestedExpression)})]));\n`,
+      );
+      expect(JSON.parse(runConsumer(consumer, root))).toEqual([
+        "from eval",
+        "from eval",
+      ]);
+    });
+  },
+  12_000,
+);
 
 test("reports unknown callers without leaking custom stack preparation", () => {
   const originalStackLimit = Error.stackTraceLimit;
@@ -133,10 +252,7 @@ test("restores error stack hooks even if V8 stack capture throws", () => {
 test.each(["cjs", "mjs"])(
   "resolves imports from actual %s consumers in escaped directories",
   (extension) => {
-    const temporaryRoot = fs.realpathSync(
-      fs.mkdtempSync(path.join(os.tmpdir(), "import-sync-path-")),
-    );
-    try {
+    withTemporaryDirectory("import-sync-path-", (temporaryRoot) => {
       const directory = path.join(
         temporaryRoot,
         "space percent% hash# unicode-🍄",
@@ -154,15 +270,19 @@ test.each(["cjs", "mjs"])(
           ? `import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\n${common}`
           : common,
       );
-      const result = spawnSync(process.execPath, [caller], {
-        encoding: "utf8",
-        timeout: 8_000,
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.status, result.stderr).toBe(0);
-    } finally {
-      fs.rmSync(temporaryRoot, { force: true, recursive: true });
-    }
+      runConsumer(caller, temporaryRoot);
+    });
   },
   12_000,
 );
+
+test("captures the actual caller filename for native resolver parent URLs", async () => {
+  const { getCallerFilename } = await import("#/files.ts");
+  const source = path.join(fs.realpathSync(process.cwd()), "file #%.mjs");
+  withCapturedStack(
+    [fakeCallSite(null, null), fakeCallSite(pathToFileURL(source).href, null)],
+    () => {
+      expect(getCallerFilename()).toBe(source);
+    },
+  );
+});

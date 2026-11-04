@@ -39,6 +39,21 @@ export function compareReleaseBases(left: string, right: string): number {
   return 0;
 }
 
+/** Compare supported stable/beta versions without floating-point coercion. */
+export function compareReleaseVersions(left: string, right: string): number {
+  const first = parseReleaseVersion(left);
+  const second = parseReleaseVersion(right);
+  const baseComparison = compareReleaseBases(first.base, second.base);
+  if (baseComparison !== 0) return baseComparison;
+  if (first.beta === undefined) return second.beta === undefined ? 0 : 1;
+  if (second.beta === undefined) return -1;
+  const firstBeta = BigInt(first.beta);
+  const secondBeta = BigInt(second.beta);
+  if (firstBeta > secondBeta) return 1;
+  if (firstBeta < secondBeta) return -1;
+  return 0;
+}
+
 function knownReleases(versions: readonly string[]): ReleaseVersion[] {
   return versions.flatMap((version) => {
     try {
@@ -88,6 +103,19 @@ export function nextBetaVersion(
     ...tags.map((tag) => tag.replace(/^v/, "")),
   ]);
   requireUnreleasedBase(base.base, existing);
+
+  // All prerelease series share the npm beta dist-tag. Creating an older beta
+  // after a newer one exists would move that tag backwards on publication.
+  for (const candidate of existing) {
+    if (
+      candidate.beta !== undefined &&
+      compareReleaseBases(candidate.base, base.base) > 0
+    ) {
+      throw new Error(
+        `A newer beta version (${candidate.version}) already exists; choose a newer base`,
+      );
+    }
+  }
 
   let highest = 0n;
   for (const candidate of [currentRelease, ...existing]) {

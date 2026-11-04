@@ -9,7 +9,36 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { getImportConditions, resolvePackageId } from "#/resolve.ts";
+import {
+  deriveImportConditions,
+  getImportConditions,
+  getStartupRequireConditions,
+  resolvePackageId,
+} from "#/resolve.ts";
+
+test.each([
+  {
+    name: "the default native require conditions",
+    native: ["require", "node", "node-addons", "module-sync"],
+    explicitRequire: false,
+  },
+  {
+    name: "an explicit --conditions=require startup flag",
+    native: ["require", "node", "node-addons", "require", "module-sync"],
+    explicitRequire: true,
+  },
+])("converts $name to import conditions", ({ native, explicitRequire }) => {
+  expect(deriveImportConditions(native)).toEqual(
+    new Set([
+      "node",
+      "import",
+      "default",
+      "module-sync",
+      "node-addons",
+      ...(explicitRequire ? ["require"] : []),
+    ]),
+  );
+});
 
 test("recreates Node's built-in import conditions", () => {
   expect(getImportConditions([], "")).toEqual(
@@ -17,6 +46,13 @@ test("recreates Node's built-in import conditions", () => {
   );
   expect(getImportConditions([], "", false)).toEqual(
     new Set(["node", "import", "default", "node-addons"]),
+  );
+});
+
+test("defaults to process flags and ignores unrelated CLI arguments", () => {
+  expect(getImportConditions().has("node")).toBe(true);
+  expect(getImportConditions(["--trace-warnings"], "")).toEqual(
+    new Set(["node", "import", "default", "module-sync", "node-addons"]),
   );
 });
 
@@ -155,6 +191,60 @@ test.each([
   expect(resolve).toHaveBeenCalledExactlyOnceWith("broken-package");
 });
 
+test("resolves a hook-only ESM specifier when CommonJS resolution misses it", () => {
+  const missing = Object.assign(new Error("missing CommonJS module"), {
+    code: "MODULE_NOT_FOUND",
+  });
+  const resolve = vi.fn(() => {
+    throw missing;
+  });
+  const resolveImport = vi.fn(() => "file:///virtual/module.mjs");
+  expect(resolvePackageId("virtual:module", resolve, resolveImport)).toBe(
+    "file:///virtual/module.mjs",
+  );
+  expect(resolveImport).toHaveBeenCalledOnce();
+
+  const importMissing = vi.fn(() => {
+    throw Object.assign(new Error("no ESM module"), {
+      code: "ERR_MODULE_NOT_FOUND",
+    });
+  });
+  expect(() => resolvePackageId("missing", resolve, importMissing)).toThrow(
+    missing,
+  );
+  expect(importMissing).toHaveBeenCalledOnce();
+});
+
+test.each([
+  new Error("resolver hook rejected the import"),
+  Object.assign(new Error("import denied by a policy hook"), {
+    code: "ERR_ACCESS_DENIED",
+  }),
+  Object.assign(new Error("custom error with CommonJS-style missing code"), {
+    code: "MODULE_NOT_FOUND",
+  }),
+])(
+  "preserves explicit ESM resolver failures when CommonJS lookup misses (%s)",
+  (failure) => {
+    const commonJsMissing = Object.assign(
+      new Error("missing CommonJS module"),
+      {
+        code: "MODULE_NOT_FOUND",
+      },
+    );
+    const resolve = vi.fn(() => {
+      throw commonJsMissing;
+    });
+    const resolveImport = vi.fn(() => {
+      throw failure;
+    });
+    expect(() =>
+      resolvePackageId("hook-protected-package", resolve, resolveImport),
+    ).toThrow(failure);
+    expect(resolveImport).toHaveBeenCalledExactlyOnceWith();
+  },
+);
+
 test("uses Node's native matching for import-only exports, subpaths, and aliases", () => {
   const root = realpathSync(
     mkdtempSync(join(tmpdir(), "import-sync-conditions-")),
@@ -206,4 +296,11 @@ test("uses Node's native matching for import-only exports, subpaths, and aliases
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("exposes native require conditions captured at startup", () => {
+  const conditions = getStartupRequireConditions();
+  expect(conditions).toContain("require");
+  expect(conditions).toContain("node");
+  expect(conditions).toContain("module-sync");
 });

@@ -1,5 +1,5 @@
-import { realpathSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import fs, { realpathSync, writeFileSync } from "node:fs";
+import { createRequire, registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -49,7 +49,7 @@ test("resolves bare package IDs from the caller and forwards ESM options", () =>
 
   expect(importSync("node-fetch", { esmOptions })).toBe(value);
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
-    createRequire(import.meta.url).resolve("node-fetch"),
+    pathToFileURL(createRequire(import.meta.url).resolve("node-fetch")).href,
   );
   expect(mocks.factory).toHaveBeenCalledExactlyOnceWith(
     expect.anything(),
@@ -63,7 +63,7 @@ test("ignores basePath when resolving a package ID", () => {
 
   expect(importSync("node-fetch", { basePath: "/ignored" })).toBe(value);
   expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
-    createRequire(import.meta.url).resolve("node-fetch"),
+    pathToFileURL(createRequire(import.meta.url).resolve("node-fetch")).href,
   );
 });
 
@@ -329,4 +329,210 @@ test("preserves import diagnostics even when options cannot be JSON serialized",
   expect(() => importSync("node:fs", options)).toThrow(
     /Failed to import from:[\s\S]*node:fs[\s\S]*\[unserializable options\][\s\S]*original loader failure/,
   );
+});
+
+test.each([
+  { name: "existing", exists: true },
+  { name: "virtual", exists: false },
+])(
+  "forwards $name relative resolver hook redirects to the loader",
+  ({ exists }) => {
+    withTemporaryDirectory("import-sync-hooked-relative-unit-", (root) => {
+      const original = join(root, exists ? "existing.mjs" : "virtual.mjs");
+      const redirected = join(root, "redirected.mjs");
+      if (exists) writeFileSync(original, "export const source = 'original';");
+      writeFileSync(redirected, "export const source = 'redirected';");
+
+      const hook = registerHooks({
+        resolve(id, context, nextResolve) {
+          if (id === (exists ? "./existing.mjs" : "./virtual.mjs")) {
+            return { url: pathToFileURL(redirected).href, shortCircuit: true };
+          }
+          return nextResolve(id, context);
+        },
+      });
+      try {
+        const value = { sentinel: "hooked" };
+        mocks.load.mockReturnValue(value);
+        expect(
+          importSync(`./${exists ? "existing" : "virtual"}.mjs`, {
+            basePath: root,
+          }),
+        ).toBe(value);
+        expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+          pathToFileURL(redirected).href,
+        );
+      } finally {
+        hook.deregister();
+      }
+    });
+  },
+);
+
+test("does not swallow unrelated filesystem errors after resolving a hook redirect", () => {
+  withTemporaryDirectory("import-sync-hook-permission-", (root) => {
+    const redirected = join(root, "redirected.mjs");
+    writeFileSync(redirected, "export const source = 'redirected';");
+    const permissionError = Object.assign(new Error("permission denied"), {
+      code: "EACCES",
+    });
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "./virtual.mjs")
+          return { url: pathToFileURL(redirected).href, shortCircuit: true };
+        return nextResolve(id, context);
+      },
+    });
+    const originalStat = fs.statSync;
+    const stat = vi
+      .spyOn(fs, "statSync")
+      .mockImplementation((filename, options) => {
+        if (String(filename) === join(root, "virtual.mjs"))
+          throw permissionError;
+        return originalStat(filename, options);
+      });
+    try {
+      expect(() => importSync("./virtual.mjs", { basePath: root })).toThrow(
+        permissionError,
+      );
+      expect(mocks.load).not.toHaveBeenCalled();
+    } finally {
+      stat.mockRestore();
+      hook.deregister();
+    }
+  });
+});
+
+test("keeps legacy extension discovery when native require(esm) is unavailable", () => {
+  const nativeSupport = vi
+    .spyOn(process.features, "require_module", "get")
+    .mockReturnValue(false);
+  try {
+    expectBasicModuleResolution("./basic");
+  } finally {
+    nativeSupport.mockRestore();
+  }
+});
+
+test("forwards a relative resolver-hook redirect to a builtin", () => {
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "./virtual.mjs") {
+        return { url: "node:os", shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const value = { sentinel: true };
+    mocks.load.mockReturnValue(value);
+    expect(importSync("./virtual.mjs", { basePath: basicDirectory })).toBe(
+      value,
+    );
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith("node:os");
+  } finally {
+    hook.deregister();
+  }
+});
+
+test.each(["?hook=1", "#hook"])(
+  "forwards a same-file package hook suffix %s to the loader",
+  (suffix) => {
+    const packagePath = createRequire(import.meta.url).resolve("node-fetch");
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "node-fetch") {
+          return {
+            url: `${pathToFileURL(packagePath).href}${suffix}`,
+            shortCircuit: true,
+          };
+        }
+        return nextResolve(id, context);
+      },
+    });
+    try {
+      const value = { sentinel: "hooked" };
+      mocks.load.mockReturnValue(value);
+      expect(importSync("node-fetch")).toBe(value);
+      expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+        `${pathToFileURL(packagePath).href}${suffix}`,
+      );
+    } finally {
+      hook.deregister();
+    }
+  },
+);
+
+test("keeps a hook's virtual file URL when a package has an existing entry", () => {
+  const virtual = pathToFileURL(
+    join(realpathSync(tmpdir()), "import-sync-virtual-hook-entry.mjs"),
+  ).href;
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "node-fetch") return { url: virtual, shortCircuit: true };
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const value = { sentinel: "virtual" };
+    mocks.load.mockReturnValue(value);
+    expect(importSync("node-fetch")).toBe(value);
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith(virtual);
+  } finally {
+    hook.deregister();
+  }
+});
+
+test("forwards a virtual package resolver-hook redirect to a builtin", () => {
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "virtual:builtin") {
+        return { url: "node:os", shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const value = { sentinel: "builtin" };
+    mocks.load.mockReturnValue(value);
+    expect(importSync("virtual:builtin")).toBe(value);
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith("node:os");
+  } finally {
+    hook.deregister();
+  }
+});
+
+test("preserves a hook URL when the package file disappears during resolution", () => {
+  const packageName = "import-sync-resolution-race-fixture";
+  const root = realpathSync(fileURLToPath(new URL(".", import.meta.url)));
+  const directory = join(root, "node_modules", packageName);
+  const target = join(directory, "entry.cjs");
+  const targetURL = pathToFileURL(target).href;
+  fs.mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ name: packageName, main: "entry.cjs" }),
+  );
+  writeFileSync(target, "module.exports = {};\n");
+
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === packageName) {
+        // Node 22 resolves the actual file first, then invokes this hook
+        // during the ESM-conditions probe; newer Nodes can invoke it earlier.
+        fs.rmSync(target, { force: true });
+        return { url: targetURL, shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const result = { sentinel: "virtual package file" };
+    mocks.load.mockReturnValue(result);
+    expect(importSync(packageName)).toBe(result);
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith(targetURL);
+  } finally {
+    hook.deregister();
+    fs.rmSync(directory, { force: true, recursive: true });
+  }
 });

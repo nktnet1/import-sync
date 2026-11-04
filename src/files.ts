@@ -8,8 +8,38 @@ type CallSite = {
   getEvalOrigin(): string | null;
 };
 
+/** Extract the source filename from V8's potentially nested eval origins. */
+const evalOriginFilename = (origin: string): string | undefined => {
+  let location = origin;
+  let evaluated = false;
+  while (location.startsWith("eval at ")) {
+    const opening = location.indexOf("(");
+    if (opening < 0 || !location.endsWith(")")) return undefined;
+    location = location.slice(opening + 1, -1);
+    evaluated = true;
+  }
+  // V8 appends :line:column to eval origins, not to ordinary filenames.
+  return evaluated ? location.replace(/:\d+:\d+$/, "") : location;
+};
+
+/** Node CLI evaluation modules keep their original filename after process.chdir(). */
+const resolveCliCallerFilename = (filename: string): string => {
+  if (filename !== "[eval]" && filename !== "[stdin]") return filename;
+  const entry = (globalThis as { module?: { filename?: unknown } }).module
+    ?.filename;
+  return typeof entry === "string" &&
+    path.isAbsolute(entry) &&
+    path.basename(entry) === filename
+    ? entry
+    : filename;
+};
+
 /** Dot-only paths name directories, regardless of platform. */
 const isDirectoryShorthand = (id: string): boolean => id === "." || id === "..";
+
+/** A final dot segment explicitly requests a directory, even without a slash. */
+const endsInDirectoryShorthand = (id: string): boolean =>
+  isDirectoryShorthand(path.basename(id));
 
 /** Whether an id is relative under the current platform's path syntax. */
 export const isRelativePath = (
@@ -20,16 +50,19 @@ export const isRelativePath = (
   /^\.\.?\//.test(id) ||
   (separator === "\\" && /^\.\.?\\/.test(id));
 
-/**
- * Get the file path of the caller function.
- *
- * Implementation inspired by:
- * - https://www.npmjs.com/package/callsite?activeTab=code
- *
- * @returns {string} absolute path of the caller's directory
- * @throws {Error} if no caller file path is available
- */
-export const getCallerDirname = (): string => {
+/** Normalise Windows separators only for Node's URL-based ESM resolver. */
+export const toESMRelativeSpecifier = (
+  id: string,
+  separator: string = path.sep,
+): string => (separator === "\\" ? id.replaceAll("\\", "/") : id);
+
+export type CallerLocation = {
+  filename: string;
+  parentURL: string;
+};
+
+/** Capture the caller's path and full URL, including ESM query or fragment. */
+const captureCallerLocation = (boundary: Function): CallerLocation => {
   const originalPrepareStackTrace = Error.prepareStackTrace;
   const originalStackTraceLimit = Error.stackTraceLimit;
 
@@ -40,29 +73,48 @@ export const getCallerDirname = (): string => {
     }
     Error.prepareStackTrace = (_, stack) => stack;
     const err = new Error("Capture caller stack trace");
-    Error.captureStackTrace(err, getCallerDirname);
+    Error.captureStackTrace(err, boundary);
     const stack = err.stack as unknown as CallSite[] | undefined;
 
     const caller = stack?.[1];
-    const callerFilePath = caller?.getFileName() ?? caller?.getEvalOrigin();
+    const fileName = caller?.getFileName();
+    const origin = fileName ? undefined : caller?.getEvalOrigin();
+    const callerFilePath =
+      fileName ?? (origin ? evalOriginFilename(origin) : undefined);
     if (!callerFilePath) {
       throw new Error("Unknown caller file path");
     }
+    const resolvedCallerPath = resolveCliCallerFilename(callerFilePath);
 
-    return path.resolve(
-      path.dirname(
-        callerFilePath.startsWith("file:")
-          ? fileURLToPath(callerFilePath)
-          : callerFilePath,
-      ),
+    const isURL = /^file:/i.test(resolvedCallerPath);
+    const filename = path.resolve(
+      isURL ? fileURLToPath(resolvedCallerPath) : resolvedCallerPath,
     );
+    return {
+      filename,
+      parentURL: isURL
+        ? new URL(resolvedCallerPath).href
+        : pathToFileURL(filename).href,
+    };
   } finally {
     Error.prepareStackTrace = originalPrepareStackTrace;
     Error.stackTraceLimit = originalStackTraceLimit;
   }
 };
 
-class MissingModuleFileError extends Error {}
+/** Return the caller's real parent URL for hook-aware native resolution. */
+export const getCallerLocation = (): CallerLocation =>
+  captureCallerLocation(getCallerLocation);
+
+/** Return the V8 caller's actual filename for filesystem resolution. */
+export const getCallerFilename = (): string =>
+  captureCallerLocation(getCallerFilename).filename;
+
+/** Resolve the caller directory without adding a stack frame to the lookup. */
+export const getCallerDirname = (): string =>
+  path.dirname(captureCallerLocation(getCallerDirname).filename);
+
+export class MissingModuleFileError extends Error {}
 
 /**
  * Find the module file path by checking for available extensions
@@ -97,10 +149,10 @@ export const findModuleFile = (
   modulePath: string,
 ): string => {
   const filePath = path.resolve(basePath, modulePath);
-  // Dot-only paths and trailing separators explicitly request directories.
+  // Final dot segments and trailing separators explicitly request directories.
   // Preserve the separator so a sibling file cannot shadow the directory.
   if (
-    isDirectoryShorthand(modulePath) ||
+    endsInDirectoryShorthand(modulePath) ||
     [path.sep, "/"].includes(modulePath.slice(-1))
   ) {
     if (fs.statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {

@@ -8,7 +8,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { findModuleFile, isRelativePath } from "#/files.ts";
+import {
+  findModuleFile,
+  isRelativePath,
+  toESMRelativeSpecifier,
+} from "#/files.ts";
 import importSync from "#/index.ts";
 
 test("uses the documented extension precedence and prefers exact files", () => {
@@ -131,5 +135,30 @@ test.each([
   "identifies relative $id paths with separator $separator",
   ({ id, separator, expected }) => {
     expect(isRelativePath(id, separator)).toBe(expected);
+  },
+);
+
+// Node's ESM resolver accepts slash-delimited URL specifiers, while Windows
+// callers may pass filesystem-style backslashes. Keep the conversion separate
+// from filesystem lookup so both forms continue to resolve the same file.
+test.each([
+  { id: String.raw`.\basic`, separator: "\\", expected: "./basic" },
+  {
+    id: String.raw`..\folder\basic`,
+    separator: "\\",
+    expected: "../folder/basic",
+  },
+  {
+    id: String.raw`./folder\basic`,
+    separator: "\\",
+    expected: "./folder/basic",
+  },
+  { id: "./basic", separator: "\\", expected: "./basic" },
+  { id: String.raw`.\basic`, separator: "/", expected: String.raw`.\basic` },
+  { id: "./basic", separator: "/", expected: "./basic" },
+])(
+  "uses ESM separators for $id on $separator",
+  ({ id, separator, expected }) => {
+    expect(toESMRelativeSpecifier(id, separator)).toBe(expected);
   },
 );

@@ -31,7 +31,8 @@ From a clean checkout, preview the next beta with
 `pnpm release:beta --base 2.2.7 --dry-run`. Choose the intended stable base
 explicitly after the current stable version has already been released.
 The script checks npm's published versions and local and remote Git tags,
-then chooses the next unused numbered `-beta.N`. Omit `--base` when continuing
+rejects a base older than an existing beta series, then chooses the next unused
+numbered `-beta.N`. Omit `--base` when continuing
 an unreleased beta series already recorded in `package.json`.
 
 `pnpm release:beta --base 2.2.7` updates the version and runs Biome, both
@@ -70,9 +71,11 @@ the upstream release. The publishing job continues to use `Production`.
 
 Packaging builds `dist`, stages the runtime and declarations alongside the
 README and licence, and removes development dependencies and lifecycle hooks.
-Both CommonJS and ESM consumers use `dist/index.cjs`; the manifest does not
-advertise an unbuilt ESM entry. The staged package is packed once without
-running lifecycle scripts and uploaded with the release tag and commit SHA.
+Both CommonJS and ESM runtime consumers use `dist/index.cjs`; the manifest does
+not advertise an unbuilt ESM JavaScript entry. TypeScript consumers instead
+resolve separate `.d.cts` (CommonJS) and `.d.mts` (ESM) declarations, with an
+included source map for the ESM declaration. The staged package is packed once
+without running lifecycle scripts and uploaded with the release tag and commit SHA.
 
 The separate **Publish** workflow checks out trusted publication code from
 the default-branch workflow revision. It downloads that tarball, verifies its
@@ -85,6 +88,15 @@ integrity matches the uploaded tarball. Conflicting tarballs fail. Transient
 publish failures are checked against the registry before retrying. Retry a
 failed Publish job using the same uploaded artifact, rather than rebuilding
 an already-published version.
+
+Publication also verifies the expected npm `latest` or `beta` dist-tag, including
+when an identical tarball was previously published. If the tag is missing or
+still points to an older version, the job fails rather than reporting success;
+correct the tag explicitly. npm trusted publishing needs the separately opt-in
+**Allow npm dist-tag** permission for OIDC-based tag changes. A rerun of an older
+release will not downgrade a tag that already points to a newer version. Before
+publishing a new version, the job also checks the existing tag and refuses a
+downgrade; a missing tag is allowed for the first release.
 
 ## Registry tests and hooks
 
