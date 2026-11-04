@@ -22,6 +22,18 @@ const evalOriginFilename = (origin: string): string | undefined => {
   return evaluated ? location.replace(/:\d+:\d+$/, "") : location;
 };
 
+/** Node CLI evaluation modules keep their original filename after process.chdir(). */
+const resolveCliCallerFilename = (filename: string): string => {
+  if (filename !== "[eval]" && filename !== "[stdin]") return filename;
+  const entry = (globalThis as { module?: { filename?: unknown } }).module
+    ?.filename;
+  return typeof entry === "string" &&
+    path.isAbsolute(entry) &&
+    path.basename(entry) === filename
+    ? entry
+    : filename;
+};
+
 /** Dot-only paths name directories, regardless of platform. */
 const isDirectoryShorthand = (id: string): boolean => id === "." || id === "..";
 
@@ -72,15 +84,16 @@ const captureCallerLocation = (boundary: Function): CallerLocation => {
     if (!callerFilePath) {
       throw new Error("Unknown caller file path");
     }
+    const resolvedCallerPath = resolveCliCallerFilename(callerFilePath);
 
-    const isURL = /^file:/i.test(callerFilePath);
+    const isURL = /^file:/i.test(resolvedCallerPath);
     const filename = path.resolve(
-      isURL ? fileURLToPath(callerFilePath) : callerFilePath,
+      isURL ? fileURLToPath(resolvedCallerPath) : resolvedCallerPath,
     );
     return {
       filename,
       parentURL: isURL
-        ? new URL(callerFilePath).href
+        ? new URL(resolvedCallerPath).href
         : pathToFileURL(filename).href,
     };
   } finally {

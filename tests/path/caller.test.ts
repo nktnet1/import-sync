@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import { getCallerDirname } from "#/files.ts";
+import { getCallerDirname, getCallerFilename } from "#/files.ts";
 import importSync from "#/index.ts";
 import { runConsumer } from "../helpers/consumer.ts";
 import { withTemporaryDirectory } from "../helpers/fixtures.ts";
@@ -56,6 +56,71 @@ test("uses the working directory for a relative eval caller", () => {
     },
   );
 });
+
+test.each([
+  {
+    name: "matching CLI eval module",
+    caller: "[eval]",
+    filename: "valid",
+    match: true,
+  },
+  {
+    name: "matching CLI stdin module",
+    caller: "[stdin]",
+    filename: "valid",
+    match: true,
+  },
+  {
+    name: "no CLI module",
+    caller: "[eval]",
+    filename: undefined,
+    match: false,
+  },
+  {
+    name: "nonabsolute CLI module",
+    caller: "[eval]",
+    filename: "relative",
+    match: false,
+  },
+  {
+    name: "unrelated CLI module",
+    caller: "[eval]",
+    filename: "other",
+    match: false,
+  },
+])(
+  "uses the original CLI filename for $name",
+  ({ caller, filename, match }) => {
+    const cwd = fs.realpathSync(process.cwd());
+    const initialPath = path.join(cwd, "somewhere", caller);
+    let moduleFilename: string | undefined;
+    if (filename === "valid") moduleFilename = initialPath;
+    if (filename === "relative") moduleFilename = caller;
+    if (filename === "other") moduleFilename = path.join(cwd, "unrelated.cjs");
+    const globalModule = moduleFilename
+      ? { filename: moduleFilename }
+      : undefined;
+    const original = Object.getOwnPropertyDescriptor(globalThis, "module");
+    try {
+      Object.defineProperty(globalThis, "module", {
+        configurable: true,
+        writable: true,
+        value: globalModule,
+      });
+      withCapturedStack(
+        [fakeCallSite(null, null), fakeCallSite(caller, null)],
+        () => {
+          expect(getCallerFilename()).toBe(
+            match ? initialPath : path.join(cwd, caller),
+          );
+        },
+      );
+    } finally {
+      if (original) Object.defineProperty(globalThis, "module", original);
+      else Reflect.deleteProperty(globalThis, "module");
+    }
+  },
+);
 
 test("resolves package imports from a CommonJS eval caller", () => {
   const cwd = fs.realpathSync(process.cwd());
