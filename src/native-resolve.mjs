@@ -28,7 +28,7 @@ export function resolveRequireFrom(specifier, parentURL) {
   // requested id, then aborts before executing its module body.
   const probe = `./.__import_sync_require_probe_${++requireProbeIndex}.cjs`;
   const stopped = Symbol("import-sync require resolution captured");
-  let resolved;
+  let resolved = null;
   const hook = registerHooks({
     resolve(id, context, nextResolve) {
       if (id !== probe) return nextResolve(id, context);
