@@ -1,4 +1,10 @@
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, vi } from "vitest";
@@ -1133,4 +1139,99 @@ testIsolatedConsumers(
       },
     );
   },
+);
+
+// Symlink paths deliberately retain their spelling with --preserve-symlinks.
+// Canonical path equality alone must not hide a resolver-hook override.
+test.skipIf(process.platform === "win32").each(["cjs", "mjs"])(
+  "preserves same-file symlink hook redirects in %s consumers",
+  (extension) => {
+    withTemporaryDirectory("import-sync-hook-symlinks-", (root) => {
+      const relativeReal = join(root, "real.mjs");
+      const relativeAlias = join(root, "alias.mjs");
+      writeFileSync(relativeReal, "export const url = import.meta.url;\n");
+      symlinkSync(relativeReal, relativeAlias);
+
+      const literal = join(root, "literal%20name.mjs");
+      const decoded = join(root, "literal name.mjs");
+      const decodedAlias = join(root, "decoded-alias.mjs");
+      writeFileSync(literal, 'export const url = "literal";\n');
+      writeFileSync(decoded, "export const url = import.meta.url;\n");
+      symlinkSync(decoded, decodedAlias);
+
+      const packageRoot = join(root, "node_modules", "symlink-package");
+      mkdirSync(packageRoot, { recursive: true });
+      const packageReal = join(packageRoot, "real.mjs");
+      const packageAlias = join(packageRoot, "alias.mjs");
+      writeFileSync(
+        join(packageRoot, "package.json"),
+        JSON.stringify({
+          name: "symlink-package",
+          type: "module",
+          exports: "./real.mjs",
+        }),
+      );
+      writeFileSync(packageReal, "export const url = import.meta.url;\n");
+      symlinkSync(packageReal, packageAlias);
+
+      // Prove these really are alternate spellings of the same existing files.
+      expect(realpathSync(relativeAlias)).toBe(realpathSync(relativeReal));
+      expect(realpathSync(packageAlias)).toBe(realpathSync(packageReal));
+      expect(realpathSync(decodedAlias)).toBe(realpathSync(decoded));
+
+      const consumer = join(root, `consumer.${extension}`);
+      writeFileSync(
+        consumer,
+        `${libraryImport(extension)}
+(async () => {
+  const { registerHooks } = ${extension === "mjs" ? 'await import("node:module")' : 'require("node:module")'};
+  const { pathToFileURL } = ${extension === "mjs" ? 'await import("node:url")' : 'require("node:url")'};
+  const relativeAlias = ${JSON.stringify(relativeAlias)};
+  const decodedAlias = ${JSON.stringify(decodedAlias)};
+  const packageAlias = ${JSON.stringify(packageAlias)};
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "./real.mjs") return { url: pathToFileURL(relativeAlias).href, shortCircuit: true };
+      if (id === "./literal%20name.mjs") return { url: pathToFileURL(decodedAlias).href, shortCircuit: true };
+      if (id === "symlink-package") return { url: pathToFileURL(packageAlias).href, shortCircuit: true };
+      return nextResolve(id, context);
+    }
+  });
+  try {
+    const nativeRelative = (await import("./real.mjs")).url;
+    const syncRelative = importSync("./real.mjs");
+    const directRelative = importSync("./alias.mjs");
+    const nativeLiteral = (await import("./literal%20name.mjs")).url;
+    const syncLiteral = importSync("./literal%20name.mjs");
+    const nativePackage = (await import("symlink-package")).url;
+    const syncPackage = importSync("symlink-package");
+    console.log(JSON.stringify({
+      nativeRelative, syncRelative: syncRelative.url, directRelative: directRelative.url,
+      nativeLiteral, syncLiteral: syncLiteral.url,
+      nativePackage, syncPackage: syncPackage.url,
+      relativeCached: syncRelative === directRelative,
+      packageCached: importSync("symlink-package") === syncPackage,
+    }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+      );
+      expect(
+        JSON.parse(
+          runConsumer(consumer, root, { flags: ["--preserve-symlinks"] }),
+        ),
+      ).toEqual({
+        nativeRelative: pathToFileURL(relativeAlias).href,
+        syncRelative: pathToFileURL(relativeAlias).href,
+        directRelative: pathToFileURL(relativeAlias).href,
+        nativeLiteral: pathToFileURL(decodedAlias).href,
+        syncLiteral: pathToFileURL(decodedAlias).href,
+        nativePackage: pathToFileURL(packageAlias).href,
+        syncPackage: pathToFileURL(packageAlias).href,
+        relativeCached: true,
+        packageCached: true,
+      });
+    });
+  },
+  12_000,
 );

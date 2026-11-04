@@ -107,20 +107,17 @@ const resolvePackageOverride = (
     getStartupRequireConditions(),
   );
   if (!isFileURL(candidate) || !path.isAbsolute(resolved)) return candidate;
+  // A hook may intentionally select a symlink alias of the same real file.
+  // Compare URL spelling instead of treating every realpath alias as identical.
+  if (candidate !== pathToFileURL(resolved).href) return candidate;
   try {
-    const nativeURL = new URL(candidate);
-    if (
-      realpathSync(fileURLToPath(nativeURL)) === realpathSync(resolved) &&
-      nativeURL.search === "" &&
-      nativeURL.hash === ""
-    ) {
-      return resolved;
-    }
+    // A hook can also return a virtual file URL that has no disk entry. Keep
+    // that URL rather than replacing it with require.resolve's path spelling.
+    realpathSync(resolved);
+    return resolved;
   } catch {
-    // A load hook might provide a virtual module with no filesystem backing.
     return candidate;
   }
-  return candidate;
 };
 
 /** Resolve consumer package exports without resolving from import-sync itself. */
@@ -151,20 +148,33 @@ const isDefaultRelativeURL = (
     return false;
   }
 
-  // Native ESM resolution canonicalises symlinks, but an unmodified URL may
-  // refer to a missing file. Canonicalise its existing parent in that case.
+  // Without --preserve-symlinks, native resolution can canonicalise the
+  // expected path. Only that exact canonical spelling is the default: a hook
+  // choosing a different symlink alias still represents an override.
   const canonicalTarget = (url: URL): string => {
     const filename = fileURLToPath(url);
     try {
       return realpathSync(filename);
     } catch {
+      // A default resolution may point at a nonexistent target. Its existing
+      // parent remains enough to determine the canonical spelling.
       return path.join(
         realpathSync(path.dirname(filename)),
         path.basename(filename),
       );
     }
   };
-  return canonicalTarget(native) === canonicalTarget(expected);
+  try {
+    const canonical = pathToFileURL(canonicalTarget(expected));
+    canonical.search = expected.search;
+    canonical.hash = expected.hash;
+    return native.href === canonical.href;
+  } catch {
+    // A hook can resolve a malformed specifier or a path whose decoded
+    // parent does not exist. If the expected default cannot be canonicalised,
+    // there is no evidence to discard the hook's valid native result.
+    return false;
+  }
 };
 
 /** Honour native hook overrides without decoding actual literal filenames. */
@@ -176,15 +186,19 @@ const resolveLiteralRelativeModule = (
   // Encoded separators and NUL bytes cannot form native file URLs, but are
   // valid literal characters in a filesystem name on supported platforms.
   if (/%(?:2f|5c|00)/i.test(id)) return resolveLegacy();
-  const native = resolveNativeImportFrom(
-    toESMRelativeSpecifier(id),
-    callerFilename,
-  );
-  return isDefaultRelativeURL(
-    toESMRelativeSpecifier(id),
-    callerFilename,
-    native,
-  )
+  const specifier = toESMRelativeSpecifier(id);
+  let native: string;
+  try {
+    native = resolveNativeImportFrom(specifier, callerFilename);
+  } catch (error) {
+    // Invalid percent escapes can name real filesystem files even though
+    // Node's URL decoder rejects the unescaped relative specifier.
+    if (error instanceof URIError && error.message === "URI malformed") {
+      return resolveLegacy();
+    }
+    throw error;
+  }
+  return isDefaultRelativeURL(specifier, callerFilename, native)
     ? resolveLegacy()
     : native;
 };
@@ -228,15 +242,9 @@ const resolveRelativeModule = (
   const legacyURL = new URL(
     isFileURL(legacy) ? legacy : pathToFileURL(legacy).href,
   );
-  const nativeURL = new URL(native);
-  if (
-    realpathSync(fileURLToPath(legacyURL)) === realpathSync(nativePath) &&
-    legacyURL.search === nativeURL.search &&
-    legacyURL.hash === nativeURL.hash
-  ) {
-    return legacy;
-  }
-  return native;
+  // A hook can choose a distinct symlink alias of the same canonical file.
+  // Realpath equivalence must not erase that deliberate module identity.
+  return legacyURL.href === native ? legacy : native;
 };
 
 /** Match relative extension discovery for plain absolute filesystem paths. */

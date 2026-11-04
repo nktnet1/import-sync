@@ -501,3 +501,38 @@ test("forwards a virtual package resolver-hook redirect to a builtin", () => {
     hook.deregister();
   }
 });
+
+test("preserves a hook URL when the package file disappears during resolution", () => {
+  const packageName = "import-sync-resolution-race-fixture";
+  const root = realpathSync(fileURLToPath(new URL(".", import.meta.url)));
+  const directory = join(root, "node_modules", packageName);
+  const target = join(directory, "entry.cjs");
+  const targetURL = pathToFileURL(target).href;
+  fs.mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ name: packageName, main: "entry.cjs" }),
+  );
+  writeFileSync(target, "module.exports = {};\n");
+
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === packageName) {
+        // Node 22 resolves the actual file first, then invokes this hook
+        // during the ESM-conditions probe; newer Nodes can invoke it earlier.
+        fs.rmSync(target, { force: true });
+        return { url: targetURL, shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const result = { sentinel: "virtual package file" };
+    mocks.load.mockReturnValue(result);
+    expect(importSync(packageName)).toBe(result);
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith(targetURL);
+  } finally {
+    hook.deregister();
+    fs.rmSync(directory, { force: true, recursive: true });
+  }
+});
