@@ -32,29 +32,29 @@ const fakeCallSite = (fileName: string | null, evalOrigin: string | null) => ({
   getEvalOrigin: () => evalOrigin,
 });
 
+/** Verify caller directories using the same mocked V8 stack shape. */
+const expectCallerDirectoryToBeCwd = (
+  fileName: string | null,
+  evalOrigin: string | null,
+): void => {
+  withCapturedStack(
+    [fakeCallSite(null, null), fakeCallSite(fileName, evalOrigin)],
+    () => {
+      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
+    },
+  );
+};
+
 test("decodes escaped ESM caller URLs", () => {
   const callerFile = path.join(
     fs.realpathSync(process.cwd()),
     "space percent% hash# unicode-🍄.mjs",
   );
-  withCapturedStack(
-    [
-      fakeCallSite(null, null),
-      fakeCallSite(pathToFileURL(callerFile).href, null),
-    ],
-    () => {
-      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
-    },
-  );
+  expectCallerDirectoryToBeCwd(pathToFileURL(callerFile).href, null);
 });
 
 test("uses the working directory for a relative eval caller", () => {
-  withCapturedStack(
-    [fakeCallSite(null, null), fakeCallSite("[eval]", null)],
-    () => {
-      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
-    },
-  );
+  expectCallerDirectoryToBeCwd("[eval]", null);
 });
 
 test.each([
@@ -138,12 +138,7 @@ if (typeof importSync("node-fetch").default !== "function") throw new Error("inc
 
 test("falls back to eval origin when the caller filename is absent", () => {
   const callerFile = path.join(fs.realpathSync(process.cwd()), "eval.js");
-  withCapturedStack(
-    [fakeCallSite(null, null), fakeCallSite(null, callerFile)],
-    () => {
-      expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
-    },
-  );
+  expectCallerDirectoryToBeCwd(null, callerFile);
 });
 
 test.each(["single", "nested"])(
@@ -158,12 +153,7 @@ test.each(["single", "nested"])(
       level === "nested"
         ? `eval at outer (eval at inner (${source}))`
         : `eval at outer (${source})`;
-    withCapturedStack(
-      [fakeCallSite(null, null), fakeCallSite(null, origin)],
-      () => {
-        expect(getCallerDirname()).toBe(fs.realpathSync(process.cwd()));
-      },
-    );
+    expectCallerDirectoryToBeCwd(null, origin);
   },
 );
 

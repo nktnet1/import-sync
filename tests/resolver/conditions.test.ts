@@ -204,14 +204,43 @@ test("resolves a hook-only ESM specifier when CommonJS resolution misses it", ()
   );
   expect(resolveImport).toHaveBeenCalledOnce();
 
-  const importMissing = vi.fn(() => {
-    throw new Error("no ESM module");
-  });
-  expect(() => resolvePackageId("missing", resolve, importMissing)).toThrow(
-    missing,
-  );
-  expect(importMissing).toHaveBeenCalledOnce();
+  for (const code of ["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"]) {
+    const importMissing = vi.fn(() => {
+      throw Object.assign(new Error("no ESM module"), { code });
+    });
+    expect(() => resolvePackageId("missing", resolve, importMissing)).toThrow(
+      missing,
+    );
+    expect(importMissing).toHaveBeenCalledOnce();
+  }
 });
+
+test.each([
+  new Error("resolver hook rejected the import"),
+  Object.assign(new Error("import denied by a policy hook"), {
+    code: "ERR_ACCESS_DENIED",
+  }),
+])(
+  "preserves explicit ESM resolver failures when CommonJS lookup misses (%s)",
+  (failure) => {
+    const commonJsMissing = Object.assign(
+      new Error("missing CommonJS module"),
+      {
+        code: "MODULE_NOT_FOUND",
+      },
+    );
+    const resolve = vi.fn(() => {
+      throw commonJsMissing;
+    });
+    const resolveImport = vi.fn(() => {
+      throw failure;
+    });
+    expect(() =>
+      resolvePackageId("hook-protected-package", resolve, resolveImport),
+    ).toThrow(failure);
+    expect(resolveImport).toHaveBeenCalledExactlyOnceWith();
+  },
+);
 
 test("uses Node's native matching for import-only exports, subpaths, and aliases", () => {
   const root = realpathSync(

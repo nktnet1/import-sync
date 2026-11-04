@@ -193,8 +193,18 @@ export const resolvePackageId = (
         if (resolveImport) {
           try {
             return resolveImport();
-          } catch {
-            // No native import target exists for this specifier.
+          } catch (nativeError) {
+            // Keep the original CommonJS error only if native resolution also
+            // reports a missing module. A hook may explicitly reject a
+            // specifier, and its error must not be mistaken for a lookup miss.
+            const code = (nativeError as NodeJS.ErrnoException | undefined)
+              ?.code;
+            if (
+              code !== "ERR_MODULE_NOT_FOUND" &&
+              code !== "MODULE_NOT_FOUND"
+            ) {
+              throw nativeError;
+            }
           }
         }
         throw error;
