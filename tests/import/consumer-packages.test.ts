@@ -164,7 +164,7 @@ testIsolatedConsumers(
     expectConsumerResult(
       root,
       extension,
-      `console.log(JSON.stringify({ value: importSync("literal-package").value }));\n`,
+      "console.log(JSON.stringify({ value: importSync('literal-package').value }));\n",
       { value: "literal" },
     );
   },

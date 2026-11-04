@@ -67,64 +67,53 @@ const isEmptyObject = (value: unknown): boolean => {
   );
 };
 
-/**
- * Imports ES6 modules synchronously similar to require in CommonJS
- * Can be used in both ES6 and CommonJS projects
- *
- * @param relativePath - the name or relative path of the module, e.g. ./arrays
- * @param {Options} [options] - options as defined in types.ts
- * @returns the imported module
- */
-const importSync = (id: string, options: Options = {}) => {
-  let modulePath: string;
-  if (isRelativePath(id)) {
-    modulePath = findRelativeModuleFile(
-      options.basePath ?? getCallerDirname(),
-      id,
-    );
-  } else if (
-    path.isAbsolute(id) &&
-    path.extname(id) === "" &&
-    !/[?#]/.test(id)
-  ) {
-    // Match relative extension discovery for plain absolute filesystem paths.
-    modulePath = findModuleFile(".", id);
-  } else if (path.isAbsolute(id) || isFileURL(id) || isBuiltin(id)) {
-    modulePath = id;
-  } else {
-    const callerFile = path.join(getCallerDirname(), "__import_sync__.cjs");
-    modulePath = resolvePackageId(
-      id,
-      createRequire(callerFile).resolve,
-      process.features.require_module
-        ? () => {
-            // The native ESM helper is distributed alongside index.cjs.
-            // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
-            const { resolveImportFrom } = require(
-              path.join(__dirname, "native-resolve.mjs"),
-            ) as {
-              resolveImportFrom: (id: string, parentURL: string) => string;
-            };
-            return resolveImportFrom(id, pathToFileURL(callerFile).href);
-          }
-        : undefined,
-    );
-  }
+/** Resolve consumer package exports without resolving from import-sync itself. */
+const resolveConsumerPackage = (id: string, callerDirname: string): string => {
+  const callerFile = path.join(callerDirname, "__import_sync__.cjs");
+  return resolvePackageId(
+    id,
+    createRequire(callerFile).resolve,
+    process.features.require_module
+      ? () => {
+          // The native ESM helper is distributed alongside index.cjs.
+          // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
+          const { resolveImportFrom } = require(
+            path.join(__dirname, "native-resolve.mjs"),
+          ) as {
+            resolveImportFrom: (id: string, parentURL: string) => string;
+          };
+          return resolveImportFrom(id, pathToFileURL(callerFile).href);
+        }
+      : undefined,
+  );
+};
 
-  // A resolved filesystem filename can contain literal URL characters.
-  // Pass those paths as encoded file URLs so the loader cannot interpret
-  // "%20", "?", or "#" as URL syntax and load a different file. A suffix
-  // on a nonexistent literal path remains a query/fragment specifier.
+/** Match relative extension discovery for plain absolute filesystem paths. */
+const findAbsoluteModulePath = (id: string): string =>
+  path.extname(id) === "" && !/[?#]/.test(id) ? findModuleFile(".", id) : id;
+
+/**
+ * A resolved filesystem filename can contain literal URL characters. Pass it
+ * as an encoded file URL so the loader cannot interpret "%20", "?", or "#"
+ * as URL syntax and load a different file. A suffix on a nonexistent literal
+ * path remains a query/fragment specifier.
+ */
+const preserveLiteralFilename = (modulePath: string): string => {
   if (
     path.isAbsolute(modulePath) &&
     /[?#%]/.test(modulePath) &&
     statSync(modulePath, { throwIfNoEntry: false })?.isFile()
   ) {
-    modulePath = pathToFileURL(modulePath).href;
+    return pathToFileURL(modulePath).href;
   }
+  return modulePath;
+};
 
-  const importedModule = esmImport(modulePath, options);
-
+/** Preserve loaded ESM exports, using native require only for empty CJS results. */
+const withCommonJSFallback = (
+  modulePath: string,
+  importedModule: ReturnType<typeof esmImport>,
+): ReturnType<typeof esmImport> => {
   // Preserve exports returned directly by the loader. A .mjs/.mts module may
   // deliberately export an empty object under the "module.exports" name; a
   // second native require would evaluate its side effects again.
@@ -163,6 +152,35 @@ const importSync = (id: string, options: Options = {}) => {
   }
 
   return importedModule;
+};
+
+/**
+ * Imports ES6 modules synchronously similar to require in CommonJS
+ * Can be used in both ES6 and CommonJS projects
+ *
+ * @param relativePath - the name or relative path of the module, e.g. ./arrays
+ * @param {Options} [options] - options as defined in types.ts
+ * @returns the imported module
+ */
+const importSync = (id: string, options: Options = {}) => {
+  let modulePath: string;
+  if (isRelativePath(id)) {
+    // Resolve caller context here rather than from a helper: V8 stack depth is
+    // part of getCallerDirname's existing contract.
+    modulePath = findRelativeModuleFile(
+      options.basePath ?? getCallerDirname(),
+      id,
+    );
+  } else if (path.isAbsolute(id)) {
+    modulePath = findAbsoluteModulePath(id);
+  } else if (isFileURL(id) || isBuiltin(id)) {
+    modulePath = id;
+  } else {
+    modulePath = resolveConsumerPackage(id, getCallerDirname());
+  }
+
+  const resolvedId = preserveLiteralFilename(modulePath);
+  return withCommonJSFallback(resolvedId, esmImport(resolvedId, options));
 };
 
 export default importSync;
