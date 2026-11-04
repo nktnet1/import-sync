@@ -168,6 +168,30 @@ export const getStartupRequireConditions = (): string[] => [
   ...startupConditions.require,
 ];
 
+/** Preserve explicit ESM hook failures, but reuse the original CJS missing error. */
+const resolveMissingPackageId = (
+  error: unknown,
+  resolveImport?: () => string,
+): string => {
+  if (resolveImport) {
+    try {
+      return resolveImport();
+    } catch (nativeError) {
+      // Node's native ESM resolver uses ERR_MODULE_NOT_FOUND for a genuine
+      // miss. A hook may explicitly throw MODULE_NOT_FOUND with its own
+      // message; preserve that error instead of masking it with the earlier
+      // CommonJS lookup failure.
+      if (
+        (nativeError as NodeJS.ErrnoException | undefined)?.code !==
+        "ERR_MODULE_NOT_FOUND"
+      ) {
+        throw nativeError;
+      }
+    }
+  }
+  throw error;
+};
+
 /** Prefer the existing require entry point; fall back only for missing conditions. */
 export const resolvePackageId = (
   id: string,
@@ -190,23 +214,7 @@ export const resolvePackageId = (
         // On Node 22, require.resolve() does not always invoke synchronous
         // resolver hooks, even when a hooked require() or import() succeeds.
         // Keep the original failure when ESM cannot resolve it either.
-        if (resolveImport) {
-          try {
-            return resolveImport();
-          } catch (nativeError) {
-            // Node's native ESM resolver uses ERR_MODULE_NOT_FOUND for a
-            // genuine miss. A hook may explicitly throw MODULE_NOT_FOUND with
-            // its own message; preserve that error instead of masking it with
-            // the earlier CommonJS lookup failure.
-            if (
-              (nativeError as NodeJS.ErrnoException | undefined)?.code !==
-              "ERR_MODULE_NOT_FOUND"
-            ) {
-              throw nativeError;
-            }
-          }
-        }
-        throw error;
+        return resolveMissingPackageId(error, resolveImport);
       default:
         throw error;
     }
