@@ -927,3 +927,129 @@ testIsolatedConsumers(
     );
   },
 );
+
+testIsolatedConsumers(
+  "uses the real %s consumer as a resolver-hook parent",
+  "import-sync-hook-parent-",
+  (root, extension) => {
+    const consumer = join(root, `consumer.${extension}`);
+    const replacement = join(root, "redirected.mjs");
+    writeFileSync(
+      join(root, "original.mjs"),
+      'export const value = "original";\n',
+    );
+    writeFileSync(replacement, 'export const value = "redirected";\n');
+    writeIsolatedPackage(
+      root,
+      "parent-hook-package",
+      { name: "parent-hook-package", type: "module", main: "entry.mjs" },
+      { "entry.mjs": 'export const value = "original package";\n' },
+    );
+
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = await import("node:module");
+  const { pathToFileURL, fileURLToPath } = await import("node:url");
+  const { realpathSync } = await import("node:fs");
+  const consumerFile = ${JSON.stringify(consumer)};
+  const isRealParent = (url) => {
+    try {
+      return realpathSync.native(fileURLToPath(url)) === realpathSync.native(consumerFile);
+    } catch { return false; }
+  };
+  const replacementURL = pathToFileURL(${JSON.stringify(replacement)}).href;
+  const observed = [];
+  const hook = registerHooks({ resolve(id, context, nextResolve) {
+    if (id === "./original.mjs" || id === "parent-hook-package") {
+      observed.push(context.parentURL);
+      if (isRealParent(context.parentURL)) {
+        return { url: replacementURL, shortCircuit: true };
+      }
+    }
+    return nextResolve(id, context);
+  }});
+  try {
+    const nativeRelative = await import("./original.mjs");
+    const nativePackage = await import("parent-hook-package");
+    const relative = importSync("./original.mjs");
+    const packageValue = importSync("parent-hook-package");
+    console.log(JSON.stringify({
+      native: [nativeRelative.value, nativePackage.value],
+      wrapper: [relative.value, packageValue.value],
+      correctParents: observed.length >= 4 && observed.every(isRealParent),
+    }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      {
+        native: ["redirected", "redirected"],
+        wrapper: ["redirected", "redirected"],
+        correctParents: true,
+      },
+    );
+  },
+);
+
+testIsolatedConsumers(
+  "preserves same-file resolver-hook queries and fragments for %s consumers",
+  "import-sync-hook-suffix-",
+  (root, extension) => {
+    const filename = join(
+      root,
+      "node_modules",
+      "suffix-hook-package",
+      "entry.mjs",
+    );
+    writeIsolatedPackage(
+      root,
+      "suffix-hook-package",
+      {
+        name: "suffix-hook-package",
+        type: "module",
+        exports: {
+          ".": { require: "./entry.mjs", import: "./entry.mjs" },
+          "./fragment": { require: "./entry.mjs", import: "./entry.mjs" },
+        },
+      },
+      { "entry.mjs": "export const url = import.meta.url;\n" },
+    );
+    expectConsumerResult(
+      root,
+      extension,
+      `(async () => {
+  const { registerHooks } = await import("node:module");
+  const { pathToFileURL, fileURLToPath } = await import("node:url");
+  const { realpathSync } = await import("node:fs");
+  const ids = ["suffix-hook-package", "suffix-hook-package/fragment"];
+  const filename = ${JSON.stringify(filename)};
+  const hook = registerHooks({ resolve(id, context, nextResolve) {
+    if (ids.includes(id)) {
+      const suffix = id === ids[0] ? "?hook=1" : "#hook";
+      return { url: pathToFileURL(filename).href + suffix, shortCircuit: true };
+    }
+    return nextResolve(id, context);
+  }});
+  try {
+    const native = await Promise.all(ids.map((id) => import(id)));
+    const wrapped = ids.map((id) => importSync(id));
+    const suffix = (url) => new URL(url).search + new URL(url).hash;
+    console.log(JSON.stringify({
+      nativeSuffixes: native.map((item) => suffix(item.url)),
+      wrapperSuffixes: wrapped.map((item) => suffix(item.url)),
+      sameFiles: wrapped.every((item) => realpathSync.native(fileURLToPath(item.url)) === realpathSync.native(filename)),
+      distinct: wrapped[0] !== wrapped[1],
+      cached: importSync(ids[0]) === wrapped[0],
+    }));
+  } finally { hook.deregister(); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      {
+        nativeSuffixes: ["?hook=1", "#hook"],
+        wrapperSuffixes: ["?hook=1", "#hook"],
+        sameFiles: true,
+        distinct: true,
+        cached: true,
+      },
+    );
+  },
+);

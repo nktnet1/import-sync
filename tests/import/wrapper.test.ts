@@ -434,3 +434,70 @@ test("forwards a relative resolver-hook redirect to a builtin", () => {
     hook.deregister();
   }
 });
+
+test.each(["?hook=1", "#hook"])(
+  "forwards a same-file package hook suffix %s to the loader",
+  (suffix) => {
+    const packagePath = createRequire(import.meta.url).resolve("node-fetch");
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "node-fetch") {
+          return {
+            url: `${pathToFileURL(packagePath).href}${suffix}`,
+            shortCircuit: true,
+          };
+        }
+        return nextResolve(id, context);
+      },
+    });
+    try {
+      const value = { sentinel: "hooked" };
+      mocks.load.mockReturnValue(value);
+      expect(importSync("node-fetch")).toBe(value);
+      expect(mocks.load).toHaveBeenCalledExactlyOnceWith(
+        `${pathToFileURL(packagePath).href}${suffix}`,
+      );
+    } finally {
+      hook.deregister();
+    }
+  },
+);
+
+test("keeps a hook's virtual file URL when a package has an existing entry", () => {
+  const virtual = pathToFileURL(
+    join(realpathSync(tmpdir()), "import-sync-virtual-hook-entry.mjs"),
+  ).href;
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "node-fetch") return { url: virtual, shortCircuit: true };
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const value = { sentinel: "virtual" };
+    mocks.load.mockReturnValue(value);
+    expect(importSync("node-fetch")).toBe(value);
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith(virtual);
+  } finally {
+    hook.deregister();
+  }
+});
+
+test("forwards a virtual package resolver-hook redirect to a builtin", () => {
+  const hook = registerHooks({
+    resolve(id, context, nextResolve) {
+      if (id === "virtual:builtin") {
+        return { url: "node:os", shortCircuit: true };
+      }
+      return nextResolve(id, context);
+    },
+  });
+  try {
+    const value = { sentinel: "builtin" };
+    mocks.load.mockReturnValue(value);
+    expect(importSync("virtual:builtin")).toBe(value);
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith("node:os");
+  } finally {
+    hook.deregister();
+  }
+});

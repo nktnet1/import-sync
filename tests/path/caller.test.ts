@@ -220,3 +220,14 @@ test.each(["cjs", "mjs"])(
   },
   12_000,
 );
+
+test("captures the actual caller filename for native resolver parent URLs", async () => {
+  const { getCallerFilename } = await import("#/files.ts");
+  const source = path.join(fs.realpathSync(process.cwd()), "file #%.mjs");
+  withCapturedStack(
+    [fakeCallSite(null, null), fakeCallSite(pathToFileURL(source).href, null)],
+    () => {
+      expect(getCallerFilename()).toBe(source);
+    },
+  );
+});

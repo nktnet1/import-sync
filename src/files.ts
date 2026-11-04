@@ -44,10 +44,10 @@ export const isRelativePath = (
  * Implementation inspired by:
  * - https://www.npmjs.com/package/callsite?activeTab=code
  *
- * @returns {string} absolute path of the caller's directory
+ * @returns {string} absolute filename of the caller
  * @throws {Error} if no caller file path is available
  */
-export const getCallerDirname = (): string => {
+const captureCallerFilename = (boundary: Function): string => {
   const originalPrepareStackTrace = Error.prepareStackTrace;
   const originalStackTraceLimit = Error.stackTraceLimit;
 
@@ -58,7 +58,7 @@ export const getCallerDirname = (): string => {
     }
     Error.prepareStackTrace = (_, stack) => stack;
     const err = new Error("Capture caller stack trace");
-    Error.captureStackTrace(err, getCallerDirname);
+    Error.captureStackTrace(err, boundary);
     const stack = err.stack as unknown as CallSite[] | undefined;
 
     const caller = stack?.[1];
@@ -71,17 +71,23 @@ export const getCallerDirname = (): string => {
     }
 
     return path.resolve(
-      path.dirname(
-        callerFilePath.startsWith("file:")
-          ? fileURLToPath(callerFilePath)
-          : callerFilePath,
-      ),
+      callerFilePath.startsWith("file:")
+        ? fileURLToPath(callerFilePath)
+        : callerFilePath,
     );
   } finally {
     Error.prepareStackTrace = originalPrepareStackTrace;
     Error.stackTraceLimit = originalStackTraceLimit;
   }
 };
+
+/** Return the V8 caller's actual filename for hook-aware native resolution. */
+export const getCallerFilename = (): string =>
+  captureCallerFilename(getCallerFilename);
+
+/** Resolve the caller directory without adding a stack frame to the lookup. */
+export const getCallerDirname = (): string =>
+  path.dirname(captureCallerFilename(getCallerDirname));
 
 export class MissingModuleFileError extends Error {}
 

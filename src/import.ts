@@ -8,7 +8,7 @@ import esm from "esm-sync";
 import {
   findModuleFile,
   findRelativeModuleFile,
-  getCallerDirname,
+  getCallerFilename,
   isRelativePath,
   MissingModuleFileError,
 } from "#/files.ts";
@@ -68,34 +68,28 @@ const isEmptyObject = (value: unknown): boolean => {
   );
 };
 
-/** Use Node's ESM resolver with the consumer's directory as the parent. */
-const resolveNativeImportFrom = (id: string, callerDirname: string): string => {
+/** Use Node's ESM resolver with the actual consumer filename as the parent. */
+const resolveNativeImportFrom = (
+  id: string,
+  callerFilename: string,
+): string => {
   // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
   const { resolveImportFrom } = require(
     path.join(__dirname, "native-resolve.mjs"),
   ) as {
     resolveImportFrom: (id: string, parentURL: string) => string;
   };
-  return resolveImportFrom(
-    id,
-    pathToFileURL(path.join(callerDirname, "__import_sync__.cjs")).href,
-  );
+  return resolveImportFrom(id, pathToFileURL(callerFilename).href);
 };
 
-/** Check redirects of an existing package on Node 22, whose require.resolve ignores hooks. */
-/* v8 ignore start -- @preserve: Node 22-only behaviour is tested with real CJS and ESM consumers. */
-const resolveNode22PackageOverride = (
+/** Preserve hook redirects (including queries) that require.resolve loses. */
+const resolvePackageOverride = (
   id: string,
-  callerDirname: string,
+  callerFilename: string,
   resolved: string,
 ): string => {
-  /* v8 ignore next 2 -- @preserve: only Node 22 lacks hook-aware require.resolve. */
-  if (!process.versions.node.startsWith("22.") || !path.isAbsolute(resolved)) {
-    return resolved;
-  }
-
-  // Do not swallow hook errors. A resolver may deliberately prohibit the
-  // package even when a file exists at the require.resolve result.
+  // require.resolve can collapse a hooked file URL onto its filesystem path,
+  // silently discarding a query or fragment even on current Node versions.
   // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
   const { resolveRequireFrom } = require(
     path.join(__dirname, "native-resolve.mjs"),
@@ -108,40 +102,46 @@ const resolveNode22PackageOverride = (
   };
   const candidate = resolveRequireFrom(
     id,
-    pathToFileURL(path.join(callerDirname, "__import_sync__.cjs")).href,
+    pathToFileURL(callerFilename).href,
     getStartupRequireConditions(),
   );
-  if (!isFileURL(candidate)) return candidate;
+  if (!isFileURL(candidate) || !path.isAbsolute(resolved)) return candidate;
   try {
     const nativeURL = new URL(candidate);
-    if (realpathSync(fileURLToPath(nativeURL)) !== realpathSync(resolved)) {
-      return candidate;
+    if (
+      realpathSync(fileURLToPath(nativeURL)) === realpathSync(resolved) &&
+      nativeURL.search === "" &&
+      nativeURL.hash === ""
+    ) {
+      return resolved;
     }
   } catch {
     // A load hook might provide a virtual module with no filesystem backing.
     return candidate;
   }
-  return resolved;
+  return candidate;
 };
-/* v8 ignore stop -- @preserve */
 
 /** Resolve consumer package exports without resolving from import-sync itself. */
-const resolveConsumerPackage = (id: string, callerDirname: string): string => {
-  const callerFile = path.join(callerDirname, "__import_sync__.cjs");
+const resolveConsumerPackage = (id: string, callerFilename: string): string => {
   const resolved = resolvePackageId(
     id,
-    createRequire(callerFile).resolve,
+    createRequire(callerFilename).resolve,
     process.features.require_module
-      ? () => resolveNativeImportFrom(id, callerDirname)
+      ? () => resolveNativeImportFrom(id, callerFilename)
       : undefined,
   );
   return process.features.require_module
-    ? resolveNode22PackageOverride(id, callerDirname, resolved)
+    ? resolvePackageOverride(id, callerFilename, resolved)
     : resolved;
 };
 
 /** Resolve redirects installed by Node's synchronous hooks, retaining path rules. */
-const resolveRelativeModule = (id: string, basePath: string): string => {
+const resolveRelativeModule = (
+  id: string,
+  basePath: string,
+  callerFilename: string,
+): string => {
   const resolveLegacy = () => findRelativeModuleFile(basePath, id);
   if (!process.features.require_module) return resolveLegacy();
 
@@ -153,7 +153,7 @@ const resolveRelativeModule = (id: string, basePath: string): string => {
     return resolveLegacy();
   }
 
-  const native = resolveNativeImportFrom(id, basePath);
+  const native = resolveNativeImportFrom(id, callerFilename);
   if (!isFileURL(native)) return native;
 
   const nativePath = fileURLToPath(native);
@@ -260,18 +260,21 @@ const withCommonJSFallback = (
 const importSync = (id: string, options: Options = {}) => {
   let modulePath: string;
   if (isRelativePath(id)) {
-    // Resolve caller context here rather than from a helper: V8 stack depth is
-    // part of getCallerDirname's existing contract.
+    // Capture the caller here: V8 stack depth determines relative resolution.
+    const callerFilename = options.basePath
+      ? path.join(options.basePath, "__import_sync__.cjs")
+      : getCallerFilename();
     modulePath = resolveRelativeModule(
       id,
-      options.basePath ?? getCallerDirname(),
+      options.basePath ?? path.dirname(callerFilename),
+      callerFilename,
     );
   } else if (path.isAbsolute(id)) {
     modulePath = findAbsoluteModulePath(id);
   } else if (isFileURL(id) || isBuiltin(id)) {
     modulePath = id;
   } else {
-    modulePath = resolveConsumerPackage(id, getCallerDirname());
+    modulePath = resolveConsumerPackage(id, getCallerFilename());
   }
 
   const resolvedId = preserveLiteralFilename(modulePath);
