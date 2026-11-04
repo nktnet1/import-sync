@@ -111,15 +111,22 @@ test.each(["cjs", "mjs"])(
   12_000,
 );
 
-test.each(["cjs", "mjs"])(
-  "preserves explicit hook errors for missing bare specifiers in %s consumers",
-  (extension) => {
+test.each(
+  ["cjs", "mjs"].flatMap((extension) =>
+    ["ERR_ACCESS_DENIED", "MODULE_NOT_FOUND"].map((code) => ({
+      extension,
+      code,
+    })),
+  ),
+)(
+  "preserves explicit $code hook errors for missing bare specifiers in $extension consumers",
+  ({ extension, code }) => {
     withTemporaryDirectory("import-sync-hook-deny-package-", (root) => {
       const result = runHookedConsumer(
         root,
         extension,
         `if (id === "missing-policy-package") {
-      throw Object.assign(new Error("explicit policy rejection"), { code: "ERR_ACCESS_DENIED" });
+      throw Object.assign(new Error("explicit policy rejection"), { code: ${JSON.stringify(code)} });
     }`,
         `let nativeError;
   try { await import("missing-policy-package"); }
@@ -132,11 +139,11 @@ test.each(["cjs", "mjs"])(
       expect(result).toEqual({
         nativeError: {
           message: "explicit policy rejection",
-          code: "ERR_ACCESS_DENIED",
+          code,
         },
         wrapperError: {
           message: "explicit policy rejection",
-          code: "ERR_ACCESS_DENIED",
+          code,
         },
       });
     });

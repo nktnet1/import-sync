@@ -204,21 +204,24 @@ test("resolves a hook-only ESM specifier when CommonJS resolution misses it", ()
   );
   expect(resolveImport).toHaveBeenCalledOnce();
 
-  for (const code of ["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"]) {
-    const importMissing = vi.fn(() => {
-      throw Object.assign(new Error("no ESM module"), { code });
+  const importMissing = vi.fn(() => {
+    throw Object.assign(new Error("no ESM module"), {
+      code: "ERR_MODULE_NOT_FOUND",
     });
-    expect(() => resolvePackageId("missing", resolve, importMissing)).toThrow(
-      missing,
-    );
-    expect(importMissing).toHaveBeenCalledOnce();
-  }
+  });
+  expect(() => resolvePackageId("missing", resolve, importMissing)).toThrow(
+    missing,
+  );
+  expect(importMissing).toHaveBeenCalledOnce();
 });
 
 test.each([
   new Error("resolver hook rejected the import"),
   Object.assign(new Error("import denied by a policy hook"), {
     code: "ERR_ACCESS_DENIED",
+  }),
+  Object.assign(new Error("custom error with CommonJS-style missing code"), {
+    code: "MODULE_NOT_FOUND",
   }),
 ])(
   "preserves explicit ESM resolver failures when CommonJS lookup misses (%s)",

@@ -194,14 +194,13 @@ export const resolvePackageId = (
           try {
             return resolveImport();
           } catch (nativeError) {
-            // Keep the original CommonJS error only if native resolution also
-            // reports a missing module. A hook may explicitly reject a
-            // specifier, and its error must not be mistaken for a lookup miss.
-            const code = (nativeError as NodeJS.ErrnoException | undefined)
-              ?.code;
+            // Node's native ESM resolver uses ERR_MODULE_NOT_FOUND for a
+            // genuine miss. A hook may explicitly throw MODULE_NOT_FOUND with
+            // its own message; preserve that error instead of masking it with
+            // the earlier CommonJS lookup failure.
             if (
-              code !== "ERR_MODULE_NOT_FOUND" &&
-              code !== "MODULE_NOT_FOUND"
+              (nativeError as NodeJS.ErrnoException | undefined)?.code !==
+              "ERR_MODULE_NOT_FOUND"
             ) {
               throw nativeError;
             }
