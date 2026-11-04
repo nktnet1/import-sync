@@ -238,7 +238,13 @@ const resolveRelativeModule = (
 
   const nativePath = fileURLToPath(native);
   if (!statSync(nativePath, { throwIfNoEntry: false })?.isFile()) {
-    return resolveLegacy();
+    // The default URL can be extensionless or refer to a directory that our
+    // filesystem resolver supports. A hook redirect to a different missing
+    // target must instead reach the loader, rather than silently loading the
+    // original module.
+    return isDefaultRelativeURL(toESMRelativeSpecifier(id), parentURL, native)
+      ? resolveLegacy()
+      : native;
   }
 
   let legacy: string;

@@ -77,6 +77,32 @@ test("honours native redirects for existing literal URL-character filenames", ()
   });
 });
 
+test("does not ignore a native hook redirect to a missing file", () => {
+  withTemporaryDirectory("import-sync-missing-hook-unit-", (root) => {
+    writeFileSync(
+      join(root, "original.mjs"),
+      'export const value = "original";\n',
+    );
+    const missingTarget = join(root, "hook-missing.mjs");
+    const hook = registerHooks({
+      resolve(id, context, nextResolve) {
+        if (id === "./original.mjs") {
+          return {
+            url: pathToFileURL(missingTarget).href,
+            shortCircuit: true,
+          };
+        }
+        return nextResolve(id, context);
+      },
+    });
+    try {
+      expect(() => importSync("./original.mjs", { basePath: root })).toThrow();
+    } finally {
+      hook.deregister();
+    }
+  });
+});
+
 test("honours native redirects when the decoded filename does not exist", () => {
   withTemporaryDirectory("import-sync-literal-hook-missing-", (root) => {
     const literal = join(root, "literal%20missing.mjs");
