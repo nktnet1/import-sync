@@ -47,7 +47,7 @@ export function resolveRequireFrom(specifier, parentURL) {
     hook.deregister();
   }
   if (typeof resolved !== "string") {
-    throw new Error("Native require resolution did not provide a URL");
+    throw new TypeError("Native require resolution did not provide a URL");
   }
   return resolved;
 }
