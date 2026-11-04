@@ -44,16 +44,13 @@ export const toESMRelativeSpecifier = (
   separator: string = path.sep,
 ): string => (separator === "\\" ? id.replaceAll("\\", "/") : id);
 
-/**
- * Get the file path of the caller function.
- *
- * Implementation inspired by:
- * - https://www.npmjs.com/package/callsite?activeTab=code
- *
- * @returns {string} absolute filename of the caller
- * @throws {Error} if no caller file path is available
- */
-const captureCallerFilename = (boundary: Function): string => {
+export type CallerLocation = {
+  filename: string;
+  parentURL: string;
+};
+
+/** Capture the caller's path and full URL, including ESM query or fragment. */
+const captureCallerLocation = (boundary: Function): CallerLocation => {
   const originalPrepareStackTrace = Error.prepareStackTrace;
   const originalStackTraceLimit = Error.stackTraceLimit;
 
@@ -76,24 +73,33 @@ const captureCallerFilename = (boundary: Function): string => {
       throw new Error("Unknown caller file path");
     }
 
-    return path.resolve(
-      callerFilePath.startsWith("file:")
-        ? fileURLToPath(callerFilePath)
-        : callerFilePath,
+    const isURL = /^file:/i.test(callerFilePath);
+    const filename = path.resolve(
+      isURL ? fileURLToPath(callerFilePath) : callerFilePath,
     );
+    return {
+      filename,
+      parentURL: isURL
+        ? new URL(callerFilePath).href
+        : pathToFileURL(filename).href,
+    };
   } finally {
     Error.prepareStackTrace = originalPrepareStackTrace;
     Error.stackTraceLimit = originalStackTraceLimit;
   }
 };
 
-/** Return the V8 caller's actual filename for hook-aware native resolution. */
+/** Return the caller's real parent URL for hook-aware native resolution. */
+export const getCallerLocation = (): CallerLocation =>
+  captureCallerLocation(getCallerLocation);
+
+/** Return the V8 caller's actual filename for filesystem resolution. */
 export const getCallerFilename = (): string =>
-  captureCallerFilename(getCallerFilename);
+  captureCallerLocation(getCallerFilename).filename;
 
 /** Resolve the caller directory without adding a stack frame to the lookup. */
 export const getCallerDirname = (): string =>
-  path.dirname(captureCallerFilename(getCallerDirname));
+  path.dirname(captureCallerLocation(getCallerDirname).filename);
 
 export class MissingModuleFileError extends Error {}
 

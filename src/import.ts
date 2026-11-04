@@ -6,9 +6,10 @@ import { types } from "node:util";
 import esm from "esm-sync";
 
 import {
+  type CallerLocation,
   findModuleFile,
   findRelativeModuleFile,
-  getCallerFilename,
+  getCallerLocation,
   isRelativePath,
   MissingModuleFileError,
   toESMRelativeSpecifier,
@@ -74,27 +75,18 @@ const isEmptyObject = (value: unknown): boolean => {
 };
 
 /** Use Node's ESM resolver with the actual consumer filename as the parent. */
-const resolveNativeImportFrom = (
-  id: string,
-  callerFilename: string,
-): string => {
+const resolveNativeImportFrom = (id: string, parentURL: string): string => {
   // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
   const { resolveImportFrom } = require(
     path.join(__dirname, "native-resolve.mjs"),
   ) as {
     resolveImportFrom: (id: string, parentURL: string) => string;
   };
-  return resolveImportFrom(id, pathToFileURL(callerFilename).href);
+  return resolveImportFrom(id, parentURL);
 };
 
-/** Preserve hook redirects (including queries) that require.resolve loses. */
-const resolvePackageOverride = (
-  id: string,
-  callerFilename: string,
-  resolved: string,
-): string => {
-  // require.resolve can collapse a hooked file URL onto its filesystem path,
-  // silently discarding a query or fragment even on current Node versions.
+/** Resolve require-first conditions without losing the consumer's full parent URL. */
+const resolveNativeRequireFrom = (id: string, parentURL: string): string => {
   // biome-ignore lint/style/noCommonJs: the helper must remain ESM at runtime
   const { resolveRequireFrom } = require(
     path.join(__dirname, "native-resolve.mjs"),
@@ -105,11 +97,18 @@ const resolvePackageOverride = (
       conditions: string[],
     ) => string;
   };
-  const candidate = resolveRequireFrom(
-    id,
-    pathToFileURL(callerFilename).href,
-    getStartupRequireConditions(),
-  );
+  return resolveRequireFrom(id, parentURL, getStartupRequireConditions());
+};
+
+/** Preserve hook redirects (including queries) that require.resolve loses. */
+const resolvePackageOverride = (
+  id: string,
+  parentURL: string,
+  resolved: string,
+): string => {
+  // require.resolve can collapse a hooked file URL onto its filesystem path,
+  // silently discarding a query or fragment even on current Node versions.
+  const candidate = resolveNativeRequireFrom(id, parentURL);
   if (!isFileURL(candidate) || !path.isAbsolute(resolved)) return candidate;
   // A hook may intentionally select a symlink alias of the same real file.
   // Compare URL spelling instead of treating every realpath alias as identical.
@@ -125,29 +124,38 @@ const resolvePackageOverride = (
 };
 
 /** Resolve consumer package exports without resolving from import-sync itself. */
-const resolveConsumerPackage = (id: string, callerFilename: string): string => {
+const resolveConsumerPackage = (id: string, caller: CallerLocation): string => {
   const useNativeResolver = supportsNativeResolverHooks();
+  // Node's createRequire().resolve() strips queries and fragments from the
+  // parent file URL. For ESM callers with a suffix, use native resolution with
+  // require conditions so user hooks still receive the real parent URL.
+  const resolveRequire =
+    useNativeResolver &&
+    caller.parentURL !== pathToFileURL(caller.filename).href
+      ? (specifier: string) =>
+          resolveNativeRequireFrom(specifier, caller.parentURL)
+      : createRequire(caller.filename).resolve;
   const resolved = resolvePackageId(
     id,
-    createRequire(callerFilename).resolve,
+    resolveRequire,
     useNativeResolver
-      ? () => resolveNativeImportFrom(id, callerFilename)
+      ? () => resolveNativeImportFrom(id, caller.parentURL)
       : undefined,
   );
   return useNativeResolver
-    ? resolvePackageOverride(id, callerFilename, resolved)
+    ? resolvePackageOverride(id, caller.parentURL, resolved)
     : resolved;
 };
 
 /** Whether native URL resolution selected the unmodified relative specifier. */
 const isDefaultRelativeURL = (
   id: string,
-  callerFilename: string,
+  parentURL: string,
   resolved: string,
 ): boolean => {
   if (!isFileURL(resolved)) return false;
   const native = new URL(resolved);
-  const expected = new URL(id, pathToFileURL(callerFilename).href);
+  const expected = new URL(id, parentURL);
   if (native.href === expected.href) return true;
   if (native.search !== expected.search || native.hash !== expected.hash) {
     return false;
@@ -185,7 +193,7 @@ const isDefaultRelativeURL = (
 /** Honour native hook overrides without decoding actual literal filenames. */
 const resolveLiteralRelativeModule = (
   id: string,
-  callerFilename: string,
+  parentURL: string,
   resolveLegacy: () => string,
 ): string => {
   // Encoded separators and NUL bytes cannot form native file URLs, but are
@@ -194,7 +202,7 @@ const resolveLiteralRelativeModule = (
   const specifier = toESMRelativeSpecifier(id);
   let native: string;
   try {
-    native = resolveNativeImportFrom(specifier, callerFilename);
+    native = resolveNativeImportFrom(specifier, parentURL);
   } catch (error) {
     // Invalid percent escapes can name real filesystem files even though
     // Node's URL decoder rejects the unescaped relative specifier.
@@ -203,7 +211,7 @@ const resolveLiteralRelativeModule = (
     }
     throw error;
   }
-  return isDefaultRelativeURL(specifier, callerFilename, native)
+  return isDefaultRelativeURL(specifier, parentURL, native)
     ? resolveLegacy()
     : native;
 };
@@ -212,7 +220,7 @@ const resolveLiteralRelativeModule = (
 const resolveRelativeModule = (
   id: string,
   basePath: string,
-  callerFilename: string,
+  parentURL: string,
 ): string => {
   const resolveLegacy = () => findRelativeModuleFile(basePath, id);
   if (!supportsNativeResolverHooks()) return resolveLegacy();
@@ -222,13 +230,10 @@ const resolveRelativeModule = (
     /[?#%]/.test(id) &&
     statSync(path.resolve(basePath, id), { throwIfNoEntry: false })?.isFile()
   ) {
-    return resolveLiteralRelativeModule(id, callerFilename, resolveLegacy);
+    return resolveLiteralRelativeModule(id, parentURL, resolveLegacy);
   }
 
-  const native = resolveNativeImportFrom(
-    toESMRelativeSpecifier(id),
-    callerFilename,
-  );
+  const native = resolveNativeImportFrom(toESMRelativeSpecifier(id), parentURL);
   if (!isFileURL(native)) return native;
 
   const nativePath = fileURLToPath(native);
@@ -250,6 +255,12 @@ const resolveRelativeModule = (
   // A hook can choose a distinct symlink alias of the same canonical file.
   // Realpath equivalence must not erase that deliberate module identity.
   return legacyURL.href === native ? legacy : native;
+};
+
+/** An explicit basePath uses a synthetic file for native hook resolution. */
+const callerFromBasePath = (basePath: string): CallerLocation => {
+  const filename = path.resolve(basePath, "__import_sync__.cjs");
+  return { filename, parentURL: pathToFileURL(filename).href };
 };
 
 /** Match relative extension discovery for plain absolute filesystem paths. */
@@ -330,20 +341,20 @@ const importSync = (id: string, options: Options = {}) => {
   let modulePath: string;
   if (isRelativePath(id)) {
     // Capture the caller here: V8 stack depth determines relative resolution.
-    const callerFilename = options.basePath
-      ? path.join(options.basePath, "__import_sync__.cjs")
-      : getCallerFilename();
+    const caller = options.basePath
+      ? callerFromBasePath(options.basePath)
+      : getCallerLocation();
     modulePath = resolveRelativeModule(
       id,
-      options.basePath ?? path.dirname(callerFilename),
-      callerFilename,
+      options.basePath ?? path.dirname(caller.filename),
+      caller.parentURL,
     );
   } else if (path.isAbsolute(id)) {
     modulePath = findAbsoluteModulePath(id);
   } else if (isFileURL(id) || isBuiltin(id)) {
     modulePath = id;
   } else {
-    modulePath = resolveConsumerPackage(id, getCallerFilename());
+    modulePath = resolveConsumerPackage(id, getCallerLocation());
   }
 
   const resolvedId = preserveLiteralFilename(modulePath);
