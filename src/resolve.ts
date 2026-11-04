@@ -155,6 +155,10 @@ const readStartupConditions = (): StartupConditions => {
   };
 };
 
+/** Older Node 22 releases support require(esm) but not synchronous hooks. */
+export const supportsNativeResolverHooks = (): boolean =>
+  process.features.require_module && typeof registerHooks === "function";
+
 // Snapshot the real process-start conditions, not mutable runtime flags.
 const startupConditions = readStartupConditions();
 const startupImportConditions = startupConditions.import;

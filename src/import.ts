@@ -14,7 +14,11 @@ import {
   toESMRelativeSpecifier,
 } from "#/files.ts";
 import { Options } from "#/options.ts";
-import { getStartupRequireConditions, resolvePackageId } from "#/resolve.ts";
+import {
+  getStartupRequireConditions,
+  resolvePackageId,
+  supportsNativeResolverHooks,
+} from "#/resolve.ts";
 
 /**
  * Returns an ESM-imported module
@@ -122,14 +126,15 @@ const resolvePackageOverride = (
 
 /** Resolve consumer package exports without resolving from import-sync itself. */
 const resolveConsumerPackage = (id: string, callerFilename: string): string => {
+  const useNativeResolver = supportsNativeResolverHooks();
   const resolved = resolvePackageId(
     id,
     createRequire(callerFilename).resolve,
-    process.features.require_module
+    useNativeResolver
       ? () => resolveNativeImportFrom(id, callerFilename)
       : undefined,
   );
-  return process.features.require_module
+  return useNativeResolver
     ? resolvePackageOverride(id, callerFilename, resolved)
     : resolved;
 };
@@ -210,7 +215,7 @@ const resolveRelativeModule = (
   callerFilename: string,
 ): string => {
   const resolveLegacy = () => findRelativeModuleFile(basePath, id);
-  if (!process.features.require_module) return resolveLegacy();
+  if (!supportsNativeResolverHooks()) return resolveLegacy();
 
   // Literal filesystem names beat the URL interpretation of ?, # and %.
   if (
