@@ -3,11 +3,38 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
 import { runConsumer } from "../helpers/consumer.ts";
-import { withTemporaryDirectory } from "../helpers/fixtures.ts";
+import {
+  createImportOnlyPackageFixture,
+  withTemporaryDirectory,
+} from "../helpers/fixtures.ts";
 
 const libraryPath = realpathSync(
   fileURLToPath(new URL("../../dist/index.cjs", import.meta.url)),
 );
+
+/** Run each fixture without synchronous Node resolver hooks. */
+const createLegacyConsumer = (
+  root: string,
+  extension: string,
+  body: string,
+): string => {
+  const prefix =
+    extension === "cjs"
+      ? `const nodeModule = require("node:module");
+nodeModule.registerHooks = undefined;
+nodeModule.syncBuiltinESMExports();
+const importSync = require(${JSON.stringify(libraryPath)});
+`
+      : `import { createRequire } from "node:module";
+const nodeModule = createRequire(import.meta.url)("node:module");
+nodeModule.registerHooks = undefined;
+nodeModule.syncBuiltinESMExports();
+const { default: importSync } = await import(${JSON.stringify(pathToFileURL(libraryPath).href)});
+`;
+  const consumer = join(root, `consumer.${extension}`);
+  writeFileSync(consumer, `${prefix}${body}`);
+  return consumer;
+};
 
 test.each(["cjs", "mjs"])(
   "supports Node 22 without registerHooks in a %s consumer",
@@ -28,23 +55,10 @@ test.each(["cjs", "mjs"])(
         "export const value = 42;\n",
       );
       writeFileSync(join(root, "local.mjs"), "export const value = 17;\n");
-      const prefix =
-        extension === "cjs"
-          ? `const nodeModule = require("node:module");
-nodeModule.registerHooks = undefined;
-nodeModule.syncBuiltinESMExports();
-const importSync = require(${JSON.stringify(libraryPath)});
-`
-          : `import { createRequire } from "node:module";
-const nodeModule = createRequire(import.meta.url)("node:module");
-nodeModule.registerHooks = undefined;
-nodeModule.syncBuiltinESMExports();
-const { default: importSync } = await import(${JSON.stringify(pathToFileURL(libraryPath).href)});
-`;
-      const consumer = join(root, `consumer.${extension}`);
-      writeFileSync(
-        consumer,
-        `${prefix}console.log(JSON.stringify({
+      const consumer = createLegacyConsumer(
+        root,
+        extension,
+        `console.log(JSON.stringify({
   relative: importSync("./local").value,
   queried: importSync("./local.mjs?probe=1").value,
   package: importSync("import-only").value,
@@ -85,24 +99,15 @@ test.each(["cjs", "mjs"])(
         join(root, "internal.mjs"),
         "export const url = import.meta.url;\n",
       );
-      const packageRoot = join(root, "node_modules", "only-import");
-      mkdirSync(join(packageRoot, "features"), { recursive: true });
-      writeFileSync(
-        join(packageRoot, "package.json"),
-        JSON.stringify({
-          name: "only-import",
-          type: "module",
-          exports: {
-            ".": { import: "./entry.mjs?main=1" },
-            "./features/*": { import: "./features/*.mjs" },
-            "./encoded": { import: "./entry%2520name.mjs#literal" },
-            "./nested": {
-              import: { custom: "./custom.mjs", default: "./entry.mjs" },
-            },
-            "./blocked": null,
-          },
-        }),
-      );
+      const packageRoot = createImportOnlyPackageFixture(root, {
+        ".": { import: "./entry.mjs?main=1" },
+        "./features/*": { import: "./features/*.mjs" },
+        "./encoded": { import: "./entry%2520name.mjs#literal" },
+        "./nested": {
+          import: { custom: "./custom.mjs", default: "./entry.mjs" },
+        },
+        "./blocked": null,
+      });
       for (const filename of [
         "entry.mjs",
         "features/one.mjs",
@@ -112,23 +117,10 @@ test.each(["cjs", "mjs"])(
         const target = join(packageRoot, filename);
         writeFileSync(target, "export const url = import.meta.url;\n");
       }
-      const prefix =
-        extension === "cjs"
-          ? `const nodeModule = require("node:module");
-nodeModule.registerHooks = undefined;
-nodeModule.syncBuiltinESMExports();
-const importSync = require(${JSON.stringify(libraryPath)});
-`
-          : `import { createRequire } from "node:module";
-const nodeModule = createRequire(import.meta.url)("node:module");
-nodeModule.registerHooks = undefined;
-nodeModule.syncBuiltinESMExports();
-const { default: importSync } = await import(${JSON.stringify(pathToFileURL(libraryPath).href)});
-`;
-      const consumer = join(root, `consumer.${extension}`);
-      writeFileSync(
-        consumer,
-        `${prefix}
+      const consumer = createLegacyConsumer(
+        root,
+        extension,
+        `
 (async () => {
   const ids = ["only-import", "only-import/features/one", "only-import/encoded", "only-import/nested", "#internal", "#external", "#external/features/one", "legacy-consumer/self"];
   const { realpathSync } = await import("node:fs");

@@ -19,7 +19,10 @@ vi.mock("node:module", async (importOriginal) => {
           }
           return original(specifier, options);
         },
-        { paths: original.paths },
+        {
+          paths: (name: string) =>
+            name === "null-paths" ? null : original.paths(name),
+        },
       );
       return resolver;
     },
@@ -40,5 +43,17 @@ test("does not hide non-missing resolver errors in the no-manifest fallback", ()
         message: "resolver rejected the lookup",
       }),
     );
+  });
+});
+
+test("handles a resolver with no package lookup paths", () => {
+  withTemporaryDirectory("import-sync-legacy-null-paths-", (root) => {
+    expect(() =>
+      resolveLegacyImport(
+        "null-paths",
+        join(root, "consumer.cjs"),
+        new Set(["import", "node", "default"]),
+      ),
+    ).toThrowError(expect.objectContaining({ code: "ERR_MODULE_NOT_FOUND" }));
   });
 });

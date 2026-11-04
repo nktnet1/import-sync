@@ -1,10 +1,4 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +9,7 @@ import {
   getStartupRequireConditions,
   resolvePackageId,
 } from "#/resolve.ts";
+import { createImportOnlyPackageFixture } from "../helpers/fixtures.ts";
 
 test.each([
   {
@@ -308,19 +303,10 @@ test("uses Node's native matching for import-only exports, subpaths, and aliases
     );
     writeFileSync(join(root, "internal.mjs"), "export const value = 1;\n");
 
-    const packageRoot = join(root, "node_modules", "only-import");
-    mkdirSync(join(packageRoot, "features"), { recursive: true });
-    writeFileSync(
-      join(packageRoot, "package.json"),
-      JSON.stringify({
-        name: "only-import",
-        type: "module",
-        exports: {
-          ".": { import: "./entry.mjs" },
-          "./features/*": { import: "./features/*.mjs" },
-        },
-      }),
-    );
+    const packageRoot = createImportOnlyPackageFixture(root, {
+      ".": { import: "./entry.mjs" },
+      "./features/*": { import: "./features/*.mjs" },
+    });
     writeFileSync(join(packageRoot, "entry.mjs"), "export const value = 2;\n");
     writeFileSync(
       join(packageRoot, "features", "one.mjs"),

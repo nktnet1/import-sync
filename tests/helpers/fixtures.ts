@@ -35,3 +35,17 @@ export function createPackageDirectory(
   writeFileSync(join(directory, entryFilename), entrySource);
   return directory;
 }
+
+/** Create a fixture package with import-only exports and a features directory. */
+export function createImportOnlyPackageFixture(
+  root: string,
+  exports: Record<string, unknown>,
+): string {
+  const directory = join(root, "node_modules", "only-import");
+  mkdirSync(join(directory, "features"), { recursive: true });
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ name: "only-import", type: "module", exports }),
+  );
+  return directory;
+}
