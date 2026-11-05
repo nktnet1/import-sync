@@ -296,26 +296,6 @@ async function checkPublished(
   }
 }
 
-/** A prior release must never move a newer dist-tag backwards. */
-class StaleDistTagError extends Error {}
-
-export function publishedDistTagStatus(
-  expected: string,
-  actual: string | undefined,
-  distTag: "latest" | "beta",
-): "current" | "superseded" {
-  if (actual === expected) return "current";
-  if (
-    actual &&
-    parseReleaseVersion(actual).distTag === distTag &&
-    compareReleaseVersions(actual, expected) > 0
-  )
-    return "superseded";
-  throw new StaleDistTagError(
-    `npm ${distTag} dist-tag points to ${actual ?? "<missing>"}, not import-sync@${expected}; repair the dist-tag explicitly`,
-  );
-}
-
 /** Do not let a new publication move an existing dist-tag backwards. */
 export function assertDistTagWillNotDowngrade(
   expected: string,
@@ -368,27 +348,6 @@ async function verifyPrepublicationDistTag(
     );
     await setTimeout(retryDelay(attempt));
     await verifyPrepublicationDistTag(context, distTag, attempt + 1);
-  }
-}
-
-/** Allow time for registry metadata to catch up with an accepted publish. */
-async function verifyPublishedDistTag(
-  context: RegistryContext,
-  distTag: "latest" | "beta",
-  attempt = 1,
-): Promise<"current" | "superseded"> {
-  try {
-    return publishedDistTagStatus(
-      context.version,
-      readPublishedDistTag(context, distTag),
-      distTag,
-    );
-  } catch (error) {
-    const stale = error instanceof StaleDistTagError;
-    if (attempt === 3 || (!stale && !transientError.test(String(error))))
-      throw error;
-    await setTimeout(retryDelay(attempt));
-    return verifyPublishedDistTag(context, distTag, attempt + 1);
   }
 }
 
@@ -558,19 +517,13 @@ export async function publishReleasePackage({
 
   const context = { npmCli: npmCliPath(), registry, version };
   if (await checkPublished(context, artifact)) {
-    const status = await verifyPublishedDistTag(context, distTag);
-    const suffix =
-      status === "superseded"
-        ? ` (npm ${distTag} already points to a newer version)`
-        : "";
     console.log(
-      `${styleText("green", "SKIPPED")} identical import-sync@${version} already published${suffix}`,
+      `${styleText("green", "SKIPPED")} identical import-sync@${version} already published`,
     );
     return;
   }
   await verifyPrepublicationDistTag(context, distTag);
   await publishWithRecovery(context, artifact, distTag);
-  await verifyPublishedDistTag(context, distTag);
   console.log(
     `${styleText("green", "PUBLISHED")} import-sync@${version} (${distTag})`,
   );

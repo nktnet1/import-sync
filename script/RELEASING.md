@@ -89,14 +89,11 @@ publish failures are checked against the registry before retrying. Retry a
 failed Publish job using the same uploaded artifact, rather than rebuilding
 an already-published version.
 
-Publication also verifies the expected npm `latest` or `beta` dist-tag, including
-when an identical tarball was previously published. If the tag is missing or
-still points to an older version, the job fails rather than reporting success;
-correct the tag explicitly. npm trusted publishing needs the separately opt-in
-**Allow npm dist-tag** permission for OIDC-based tag changes. A rerun of an older
-release will not downgrade a tag that already points to a newer version. Before
-publishing a new version, the job also checks the existing tag and refuses a
-downgrade; a missing tag is allowed for the first release.
+Before publishing a new version, the job checks the existing npm `latest` or
+`beta` dist-tag and refuses a downgrade; a missing tag is allowed for the first
+release. After npm accepts a publication, it does not recheck the dist-tag,
+since registry metadata may take time to update. A rerun skips an identical
+already-published tarball without inspecting its current dist-tag.
 
 ## Registry tests and hooks
 
